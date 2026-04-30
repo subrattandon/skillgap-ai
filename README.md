@@ -10,10 +10,11 @@
 [![shadcn/ui](https://img.shields.io/badge/shadcn%2Fui-Latest-000000?style=for-the-badge&logo=shadcnui&logoColor=white)](https://ui.shadcn.com/)
 [![Framer Motion](https://img.shields.io/badge/Framer_Motion-Latest-FF0066?style=for-the-badge&logo=framer&logoColor=white)](https://www.framer.com/motion/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](./LICENSE)
+[![Deploy](https://img.shields.io/badge/Vercel-Live-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://my-project-nine-virid-24.vercel.app)
 
 <br />
 
-[🚀 Live Demo](#-getting-started) · [✨ Features](#-features) · [🛠 Tech Stack](#-tech-stack) · [📸 Screenshots](#-screenshots) · [📐 Architecture](#-architecture) · [🤝 Contributing](#-contributing)
+[🚀 Live Demo](https://my-project-nine-virid-24.vercel.app) · [✨ Features](#-features) · [🛠 Tech Stack](#-tech-stack) · [📸 Screenshots](#-screenshots) · [📐 Architecture](#-architecture) · [🤝 Contributing](#-contributing)
 
 </div>
 
@@ -22,6 +23,8 @@
 ## 📖 Overview
 
 **AI Technical Interviewer** is a full-stack web application that simulates real technical interviews using AI. It generates adaptive, role-specific questions across DSA, System Design, and HR/Behavioral domains — adjusting difficulty in real-time based on your responses. Get detailed AI-powered feedback, per-question scoring, and track your progress over time.
+
+> 🟢 **Try it live**: [https://my-project-nine-virid-24.vercel.app](https://my-project-nine-virid-24.vercel.app)
 
 > 💡 Whether you're a beginner preparing for your first SDE interview or a senior engineer brushing up on system design — this app adapts to **your** level and helps you improve.
 
@@ -178,6 +181,19 @@ bun run dev
 ```
 
 The app will be running at `http://localhost:3000`
+
+### 🌐 Deploy to Vercel
+
+The easiest way to deploy this Next.js app is with [Vercel](https://vercel.com):
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/subrattandon/Ai-technical-interviewer)
+
+Or via CLI:
+
+```bash
+npm i -g vercel
+vercel --prod
+```
 
 ### Environment Variables
 
