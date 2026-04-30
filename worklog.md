@@ -398,3 +398,35 @@ Current Project Status:
 - Professional README with badges, features, architecture, and setup guide
 - Repository has description and 14 relevant topics
 - No outstanding bugs or critical issues
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Deploy to Vercel and update README + GitHub description with live URL
+
+Work Log:
+- Installed Vercel CLI globally (v52.2.1)
+- Deployed to Vercel using token: vercel --token --yes
+- Vercel auto-detected Next.js project, connected GitHub repo
+- Build succeeded: Next.js 16.1.3 (Turbopack), compiled in 13.5s
+- Production URL: https://my-project-nine-virid-24.vercel.app
+- Updated README.md with:
+  - Vercel badge in header: [![Deploy](https://img.shields.io/badge/Vercel-Live-000000)]
+  - Live Demo link now points to Vercel URL
+  - Overview section: Added "Try it live" link with green circle
+  - New "Deploy to Vercel" section with one-click deploy button + CLI instructions
+- Updated GitHub repository description: Added "Live at https://my-project-nine-virid-24.vercel.app"
+- Added "vercel" to GitHub topics (now 15 topics)
+- Committed and pushed all changes to GitHub
+
+Stage Summary:
+- App deployed on Vercel: https://my-project-nine-virid-24.vercel.app
+- README.md updated with Vercel badge, live demo link, and deploy button
+- GitHub description includes live URL
+- All changes pushed to GitHub
+
+Current Project Status:
+- Application is deployed and live on Vercel
+- Code is at https://github.com/subrattandon/Ai-technical-interviewer
+- Live app at https://my-project-nine-virid-24.vercel.app
+- No outstanding bugs or critical issues
