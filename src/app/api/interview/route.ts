@@ -109,7 +109,7 @@ async function getZAI() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { profile, messages, action, question, answer } = body;
+    const { profile, messages, action, question, answer, questionTypes } = body;
 
     if (action === 'feedback') {
       return await handleFeedback(profile, messages);
@@ -132,6 +132,9 @@ export async function POST(request: NextRequest) {
 
     const zai = await getZAI();
 
+    // Build question type focus instruction if provided
+    const typeFocusInstruction = buildTypeFocusInstruction(questionTypes);
+
     if (action === 'start') {
       const profileContext = `Candidate Profile:
 - Role: ${profile.role}
@@ -139,6 +142,7 @@ export async function POST(request: NextRequest) {
 - Skills: ${profile.skills || 'Not specified'}
 - Previous Performance Score: ${profile.previousScore || 'Not available'}
 ${profile.practiceMode ? '- Practice Mode: Enabled (hints are available)' : ''}
+${typeFocusInstruction}
 
 Generate the first interview question for this candidate. Start with an appropriate difficulty level based on their experience.`;
 
@@ -162,7 +166,7 @@ Generate the first interview question for this candidate. Start with an appropri
     }
 
     if (action === 'next') {
-      const conversationContext = buildConversationContext(profile, messages);
+      const conversationContext = buildConversationContext(profile, messages, typeFocusInstruction);
 
       const completion = await zai.chat.completions.create({
         messages: [
@@ -184,7 +188,7 @@ Generate the first interview question for this candidate. Start with an appropri
     }
 
     if (action === 'skip') {
-      const skipContext = buildSkipContext(profile, messages);
+      const skipContext = buildSkipContext(profile, messages, typeFocusInstruction);
 
       const completion = await zai.chat.completions.create({
         messages: [
@@ -216,6 +220,17 @@ Generate the first interview question for this candidate. Start with an appropri
       { status: 500 }
     );
   }
+}
+
+function buildTypeFocusInstruction(questionTypes?: string[]): string {
+  if (!questionTypes || questionTypes.length === 0) return '';
+  const typeLabels: Record<string, string> = {
+    'DSA': 'DSA (Data Structures and Algorithms)',
+    'System Design': 'System Design',
+    'HR/Behavioral': 'HR/Behavioral',
+  };
+  const labels = questionTypes.map((t) => typeLabels[t] || t).join(', ');
+  return `- Question Focus: The candidate wants to focus on these question types: ${labels}. Prioritize these types but you may occasionally include others for variety.`;
 }
 
 async function handleHint(
@@ -369,13 +384,15 @@ Interview Transcript:\n`;
 
 function buildConversationContext(
   profile: { role: string; level: string; skills: string; previousScore: string },
-  messages: Array<{ role: string; content: string; questionType?: string; difficulty?: string }>
+  messages: Array<{ role: string; content: string; questionType?: string; difficulty?: string }>,
+  typeFocusInstruction: string = ''
 ) {
   let context = `Candidate Profile:
 - Role: ${profile.role}
 - Experience Level: ${profile.level}
 - Skills: ${profile.skills || 'Not specified'}
 - Previous Performance Score: ${profile.previousScore || 'Not available'}
+${typeFocusInstruction}
 
 Conversation so far:\n`;
 
@@ -394,12 +411,14 @@ Conversation so far:\n`;
 
 function buildSkipContext(
   profile: { role: string; level: string; skills: string; previousScore: string },
-  messages: Array<{ role: string; content: string; questionType?: string; difficulty?: string }>
+  messages: Array<{ role: string; content: string; questionType?: string; difficulty?: string }>,
+  typeFocusInstruction: string = ''
 ) {
   let context = `Candidate Profile:
 - Role: ${profile.role}
 - Experience Level: ${profile.level}
 - Skills: ${profile.skills || 'Not specified'}
+${typeFocusInstruction}
 
 The candidate chose to skip the last question. This may indicate the topic was too difficult or unfamiliar.
 

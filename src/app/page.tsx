@@ -46,6 +46,15 @@ import {
   MicOff,
   Bookmark,
   Printer,
+  Volume2,
+  VolumeX,
+  Pause,
+  Play,
+  Quote,
+  ChevronDown,
+  Eye,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -86,6 +95,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   useInterviewStore,
   type CandidateProfile,
   type InterviewMessage,
@@ -112,29 +127,47 @@ function useAutoResizeTextarea(value: string, maxHeight: number = 160) {
   return ref;
 }
 
-// ─── Elapsed Timer Hook ─────────────────────────────────────────
-function useElapsedTime(startTime: Date | null) {
-  const [elapsed, setElapsed] = useState(() => startTime ? computeElapsed(startTime) : '00:00');
+// ─── Elapsed Timer Hook (respects isPaused) ─────────────────────
+function useElapsedTime(startTime: Date | null, isPaused: boolean) {
+  const pausedAccumRef = useRef(0);
+  const lastTickRef = useRef<Date | null>(null);
+
+  const [elapsed, setElapsed] = useState('00:00');
 
   useEffect(() => {
-    if (!startTime) return;
+    if (!startTime) {
+      return;
+    }
+
+    // Initialize from startTime
+    if (pausedAccumRef.current === 0) {
+      pausedAccumRef.current = Date.now() - new Date(startTime).getTime();
+      lastTickRef.current = new Date();
+    }
 
     const update = () => {
-      setElapsed(computeElapsed(startTime));
+      if (!isPaused) {
+        const now = new Date();
+        if (lastTickRef.current === null) {
+          lastTickRef.current = now;
+        }
+        pausedAccumRef.current += now.getTime() - lastTickRef.current.getTime();
+        lastTickRef.current = now;
+
+        const diff = Math.floor(pausedAccumRef.current / 1000);
+        const mins = Math.floor(diff / 60);
+        const secs = diff % 60;
+        setElapsed(`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
+      } else {
+        lastTickRef.current = null;
+      }
     };
 
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [startTime]);
+  }, [startTime, isPaused]);
 
   return elapsed;
-}
-
-function computeElapsed(startTime: Date): string {
-  const diff = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
-  const mins = Math.floor(diff / 60);
-  const secs = diff % 60;
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 function computeDurationMinutes(startTime: Date | null, endTime?: Date | null): string {
@@ -142,6 +175,28 @@ function computeDurationMinutes(startTime: Date | null, endTime?: Date | null): 
   const end = endTime || new Date();
   const diff = Math.round((new Date(end).getTime() - new Date(startTime).getTime()) / 60000);
   return diff < 1 ? '<1 min' : `${diff} min`;
+}
+
+// ─── Relative Time Hook ─────────────────────────────────────────
+function useRelativeTime(timestamp: Date): string {
+  const [relTime, setRelTime] = useState('');
+
+  useEffect(() => {
+    const compute = () => {
+      const now = Date.now();
+      const then = new Date(timestamp).getTime();
+      const diffSec = Math.floor((now - then) / 1000);
+      if (diffSec < 5) setRelTime('just now');
+      else if (diffSec < 60) setRelTime(`${diffSec}s ago`);
+      else if (diffSec < 3600) setRelTime(`${Math.floor(diffSec / 60)}m ago`);
+      else setRelTime(`${Math.floor(diffSec / 3600)}h ago`);
+    };
+    compute();
+    const interval = setInterval(compute, 10000);
+    return () => clearInterval(interval);
+  }, [timestamp]);
+
+  return relTime;
 }
 
 // ─── Voice Input Hook (Web Speech API) ─────────────────────────
@@ -207,6 +262,43 @@ function useVoiceInput(onTranscript: (text: string) => void) {
   return { isListening, toggleListening, startListening, stopListening };
 }
 
+// ─── TTS Hook ───────────────────────────────────────────────────
+function useTTS() {
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+
+  const speak = useCallback((text: string, messageId: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+
+    // If already speaking this message, stop it
+    if (speakingId === messageId) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+      return;
+    }
+
+    // Cancel any existing speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.onend = () => setSpeakingId(null);
+    utterance.onerror = () => setSpeakingId(null);
+
+    setSpeakingId(messageId);
+    window.speechSynthesis.speak(utterance);
+  }, [speakingId]);
+
+  const stop = useCallback(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeakingId(null);
+  }, []);
+
+  return { speakingId, speak, stop };
+}
+
 // ─── Theme Toggle ─────────────────────────────────────────────────
 function ThemeToggle({ className = '' }: { className?: string }) {
   const { theme, setTheme } = useTheme();
@@ -232,7 +324,7 @@ function ThemeToggle({ className = '' }: { className?: string }) {
           <Button
             variant="ghost"
             size="icon"
-            className={`h-9 w-9 ${className}`}
+            className={`h-9 w-9 hover:scale-110 transition-transform ${className}`}
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           >
             <AnimatePresence mode="wait" initial={false}>
@@ -451,15 +543,35 @@ function ConfettiEffect() {
   );
 }
 
-// ─── Score Donut Chart ──────────────────────────────────────────
+// ─── Score Donut Chart with Counting Animation ──────────────────
 function ScoreDonut({ score, size = 140 }: { score: number; size?: number }) {
+  const [displayScore, setDisplayScore] = useState(0);
   const radius = (size - 16) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference * (1 - score / 10);
   const scoreColor = score >= 7 ? '#10b981' : score >= 4 ? '#f59e0b' : '#ef4444';
+  const glowClass = score >= 7 ? 'score-glow-emerald' : score >= 4 ? 'score-glow-amber' : 'score-glow-rose';
+
+  // Counting animation
+  useEffect(() => {
+    let current = 0;
+    const duration = 1500;
+    const steps = 30;
+    const increment = score / steps;
+    const stepTime = duration / steps;
+    const timer = setInterval(() => {
+      current += increment;
+      if (current >= score) {
+        current = score;
+        clearInterval(timer);
+      }
+      setDisplayScore(Math.round(current * 10) / 10);
+    }, stepTime);
+    return () => clearInterval(timer);
+  }, [score]);
 
   return (
-    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+    <div className={`relative inline-flex items-center justify-center ${glowClass}`} style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle
           cx={size / 2} cy={size / 2} r={radius}
@@ -478,12 +590,98 @@ function ScoreDonut({ score, size = 140 }: { score: number; size?: number }) {
           initial={{ opacity: 0, scale: 0.5 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.5, type: 'spring' }}
-          className="text-5xl font-black bg-gradient-to-br from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent"
+          className="text-5xl font-black bg-gradient-to-br from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent tabular-nums"
         >
-          {score}
+          {displayScore % 1 === 0 ? displayScore : displayScore.toFixed(1)}
         </motion.span>
         <span className="text-xs text-muted-foreground font-medium">/10</span>
       </div>
+    </div>
+  );
+}
+
+// ─── Difficulty Curve Chart ──────────────────────────────────────
+function DifficultyCurveChart({ messages }: { messages: InterviewMessage[] }) {
+  const interviewerMsgs = messages.filter((m) => m.role === 'interviewer' && m.difficulty);
+  if (interviewerMsgs.length < 2) return null;
+
+  const difficultyMap: Record<string, number> = { easy: 1, medium: 2, hard: 3 };
+  const data = interviewerMsgs.map((m) => difficultyMap[m.difficulty || 'easy'] || 1);
+  const width = 280;
+  const height = 80;
+  const padding = { top: 10, right: 10, bottom: 20, left: 25 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+
+  const maxX = data.length - 1;
+  const points = data.map((val, i) => ({
+    x: padding.left + (maxX > 0 ? (i / maxX) * chartW : chartW / 2),
+    y: padding.top + chartH - ((val - 1) / 2) * chartH,
+  }));
+
+  const polyline = points.map((p) => `${p.x},${p.y}`).join(' ');
+  const areaPath = `M${points[0].x},${padding.top + chartH} ` +
+    points.map((p) => `L${p.x},${p.y}`).join(' ') +
+    ` L${points[points.length - 1].x},${padding.top + chartH} Z`;
+
+  return (
+    <div className="mt-3">
+      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">Difficulty Curve</div>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="w-full">
+        <defs>
+          <linearGradient id="diffGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="oklch(0.55 0.15 170)" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="oklch(0.55 0.15 170)" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {/* Y-axis labels */}
+        <text x={padding.left - 5} y={padding.top + 2} textAnchor="end" className="text-[7px] fill-muted-foreground">Hard</text>
+        <text x={padding.left - 5} y={padding.top + chartH / 2 + 2} textAnchor="end" className="text-[7px] fill-muted-foreground">Med</text>
+        <text x={padding.left - 5} y={padding.top + chartH + 2} textAnchor="end" className="text-[7px] fill-muted-foreground">Easy</text>
+        {/* Grid lines */}
+        <line x1={padding.left} y1={padding.top} x2={width - padding.right} y2={padding.top} stroke="currentColor" strokeWidth="0.5" className="text-muted/20" />
+        <line x1={padding.left} y1={padding.top + chartH / 2} x2={width - padding.right} y2={padding.top + chartH / 2} stroke="currentColor" strokeWidth="0.5" className="text-muted/20" strokeDasharray="3,3" />
+        <line x1={padding.left} y1={padding.top + chartH} x2={width - padding.right} y2={padding.top + chartH} stroke="currentColor" strokeWidth="0.5" className="text-muted/20" />
+        {/* Area fill */}
+        <motion.path
+          d={areaPath}
+          fill="url(#diffGrad)"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.3 }}
+        />
+        {/* Line */}
+        <motion.polyline
+          points={polyline}
+          fill="none"
+          stroke="oklch(0.55 0.15 170)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 1, delay: 0.2 }}
+        />
+        {/* Data points */}
+        {points.map((p, i) => (
+          <motion.circle
+            key={i}
+            cx={p.x} cy={p.y} r="3"
+            fill="oklch(0.55 0.15 170)"
+            stroke="white"
+            strokeWidth="1.5"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.4 + i * 0.08 }}
+          />
+        ))}
+        {/* X-axis labels */}
+        {points.map((p, i) => (
+          <text key={i} x={p.x} y={height - 3} textAnchor="middle" className="text-[7px] fill-muted-foreground">
+            Q{i + 1}
+          </text>
+        ))}
+      </svg>
     </div>
   );
 }
@@ -505,24 +703,21 @@ function PerformanceRadar({ scores }: { scores: { DSA: number; SystemDesign: num
     };
   };
 
-  // Grid lines (pentagons at 20%, 40%, 60%, 80%, 100%)
   const gridLevels = [1, 2, 3, 4, 5];
   const gridPaths = gridLevels.map((level) => {
-    const points = categories.map((_, i) => {
+    const pts = categories.map((_, i) => {
       const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
       const r = (level / 5) * maxRadius;
       return `${center + r * Math.cos(angle)},${center + r * Math.sin(angle)}`;
     });
-    return points.join(' ');
+    return pts.join(' ');
   });
 
-  // Data polygon
   const dataPoints = categories.map((cat, i) => {
     const p = getPoint(i, scores[cat as keyof typeof scores] || 0);
     return `${p.x},${p.y}`;
   });
 
-  // Label positions
   const labelPositions = categories.map((_, i) => {
     const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
     const r = maxRadius + 20;
@@ -534,11 +729,9 @@ function PerformanceRadar({ scores }: { scores: { DSA: number; SystemDesign: num
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {/* Grid */}
       {gridPaths.map((path, i) => (
         <polygon key={i} points={path} fill="none" stroke="currentColor" strokeWidth="0.5" className="text-muted/30" />
       ))}
-      {/* Axis lines */}
       {categories.map((_, i) => {
         const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
         return (
@@ -551,7 +744,6 @@ function PerformanceRadar({ scores }: { scores: { DSA: number; SystemDesign: num
           />
         );
       })}
-      {/* Data polygon */}
       <motion.polygon
         points={dataPoints.join(' ')}
         fill="oklch(0.55 0.15 170 / 0.15)"
@@ -561,7 +753,6 @@ function PerformanceRadar({ scores }: { scores: { DSA: number; SystemDesign: num
         animate={{ opacity: 1 }}
         transition={{ duration: 0.8, delay: 0.5 }}
       />
-      {/* Data points */}
       {categories.map((cat, i) => {
         const p = getPoint(i, scores[cat as keyof typeof scores] || 0);
         return (
@@ -575,7 +766,6 @@ function PerformanceRadar({ scores }: { scores: { DSA: number; SystemDesign: num
           />
         );
       })}
-      {/* Labels */}
       {labels.map((label, i) => (
         <text
           key={i}
@@ -613,6 +803,7 @@ function KeyboardShortcutsOverlay({ open, onClose }: { open: boolean; onClose: (
   const shortcuts = [
     { keys: 'Ctrl + Enter', description: 'Send message' },
     { keys: 'Ctrl + K', description: 'Skip question' },
+    { keys: 'Ctrl + P', description: 'Pause/Resume' },
     { keys: 'Escape', description: 'Close dialogs' },
     { keys: '?', description: 'Toggle shortcuts' },
   ];
@@ -665,16 +856,23 @@ function KeyboardShortcutsOverlay({ open, onClose }: { open: boolean; onClose: (
   );
 }
 
-// ─── Interview History ──────────────────────────────────────────
+// ─── Interview History (Enhanced) ───────────────────────────────
 function InterviewHistoryPanel() {
-  const { history, loadHistory, clearHistory } = useInterviewStore();
+  const { history, loadHistory, clearHistory, expandedHistoryIds, toggleExpandedHistory } = useInterviewStore();
   const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [viewDetailEntry, setViewDetailEntry] = useState<InterviewHistoryEntry | null>(null);
 
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
 
   if (history.length === 0) return null;
+
+  const getScoreBarColor = (score: number) => {
+    if (score >= 7) return 'bg-emerald-500';
+    if (score >= 4) return 'bg-amber-500';
+    return 'bg-rose-500';
+  };
 
   return (
     <motion.div
@@ -690,7 +888,7 @@ function InterviewHistoryPanel() {
               Recent Sessions
             </CardTitle>
             <AlertDialog open={showConfirmClear} onOpenChange={setShowConfirmClear}>
-              <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-rose-500" onClick={() => setShowConfirmClear(true)}>
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-rose-500 hover:scale-105 transition-transform" onClick={() => setShowConfirmClear(true)}>
                 <Trash2 className="h-3 w-3 mr-1" />
                 Clear
               </Button>
@@ -709,33 +907,133 @@ function InterviewHistoryPanel() {
             </AlertDialog>
           </div>
         </CardHeader>
-        <CardContent className="max-h-48 overflow-y-auto custom-scrollbar">
+        <CardContent className="max-h-72 overflow-y-auto custom-scrollbar">
           <div className="space-y-2">
-            {history.slice(0, 5).map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border/50 hover:bg-muted/60 transition-colors">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex-shrink-0">
-                    <Badge variant="secondary" className="text-[10px]">{entry.role}</Badge>
+            {history.slice(0, 10).map((entry) => {
+              const isExpanded = expandedHistoryIds.includes(entry.id);
+              return (
+                <div key={entry.id} className="rounded-lg bg-muted/40 border border-border/50 hover:bg-muted/60 transition-colors overflow-hidden">
+                  <div className="flex items-center justify-between p-2.5">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex-shrink-0">
+                        <Badge variant="secondary" className="text-[10px]">{entry.role}</Badge>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium truncate">{entry.level} · {entry.questionCount} Qs · {entry.duration}</p>
+                        <p className="text-[10px] text-muted-foreground">{entry.date}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {entry.score !== null && (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-12 h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div className={`h-full rounded-full ${getScoreBarColor(entry.score)}`} style={{ width: `${entry.score * 10}%` }} />
+                          </div>
+                          <Badge variant="outline" className={`text-[10px] ${
+                            entry.score >= 7 ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400' :
+                            entry.score >= 4 ? 'border-amber-500/30 text-amber-600 dark:text-amber-400' :
+                            'border-rose-500/30 text-rose-600 dark:text-rose-400'
+                          }`}>
+                            {entry.score}/10
+                          </Badge>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => toggleExpandedHistory(entry.id)}
+                        className="p-0.5 rounded hover:bg-muted/80 transition-colors"
+                      >
+                        <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium truncate">{entry.level} · {entry.questionCount} Qs · {entry.duration}</p>
-                    <p className="text-[10px] text-muted-foreground">{entry.date}</p>
-                  </div>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="px-2.5 pb-2.5 border-t border-border/30"
+                    >
+                      {entry.skills && (
+                        <div className="mt-2">
+                          <div className="flex flex-wrap gap-1">
+                            {entry.skills.split(',').map((s, i) => s.trim() && (
+                              <Badge key={i} variant="outline" className="text-[9px] py-0">{s.trim()}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {entry.score !== null && (
+                        <div className="mt-1.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span>Score breakdown:</span>
+                          <div className="flex gap-0.5">
+                            {[1,2,3,4,5,6,7,8,9,10].map((n) => (
+                              <div key={n} className={`w-2 h-3 rounded-sm ${n <= entry.score ? getScoreBarColor(entry.score) : 'bg-muted'}`} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-1.5 h-6 text-[10px] gap-1 text-primary hover:text-primary/80 hover:scale-105 transition-transform"
+                        onClick={() => setViewDetailEntry(entry)}
+                      >
+                        <Eye className="h-2.5 w-2.5" />
+                        View Details
+                      </Button>
+                    </motion.div>
+                  )}
                 </div>
-                {entry.score !== null && (
-                  <Badge variant="outline" className={`text-xs flex-shrink-0 ${
-                    entry.score >= 7 ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400' :
-                    entry.score >= 4 ? 'border-amber-500/30 text-amber-600 dark:text-amber-400' :
-                    'border-rose-500/30 text-rose-600 dark:text-rose-400'
-                  }`}>
-                    {entry.score}/10
-                  </Badge>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>
+
+      {/* View Details Modal */}
+      <Dialog open={!!viewDetailEntry} onOpenChange={(open) => { if (!open) setViewDetailEntry(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              Session Transcript
+            </DialogTitle>
+          </DialogHeader>
+          {viewDetailEntry && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">{viewDetailEntry.role}</Badge>
+                <Badge variant="outline">{viewDetailEntry.level}</Badge>
+                <Badge variant="outline">{viewDetailEntry.questionCount} Questions</Badge>
+                <Badge variant="outline">{viewDetailEntry.duration}</Badge>
+                {viewDetailEntry.score !== null && (
+                  <Badge className={viewDetailEntry.score >= 7 ? 'bg-emerald-500/10 text-emerald-600' : viewDetailEntry.score >= 4 ? 'bg-amber-500/10 text-amber-600' : 'bg-rose-500/10 text-rose-600'}>
+                    Score: {viewDetailEntry.score}/10
+                  </Badge>
+                )}
+              </div>
+              <Separator />
+              {viewDetailEntry.messages && viewDetailEntry.messages.length > 0 ? (
+                <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
+                  {viewDetailEntry.messages.map((msg, i) => (
+                    <div key={i} className={`p-2 rounded-lg text-xs ${msg.role === 'interviewer' ? 'bg-primary/5 border-l-2 border-primary' : msg.role === 'candidate' ? 'bg-muted/50 border-l-2 border-muted-foreground/30' : 'bg-muted/30'}`}>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="font-semibold text-[10px]">{msg.role === 'interviewer' ? 'Interviewer' : msg.role === 'candidate' ? 'You' : 'System'}</span>
+                        {msg.questionType && <Badge variant="outline" className="text-[8px] py-0">{msg.questionType}</Badge>}
+                        {msg.difficulty && <Badge variant="outline" className="text-[8px] py-0">{msg.difficulty}</Badge>}
+                      </div>
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No transcript available for this session.</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }
@@ -767,7 +1065,7 @@ function AnimatedCounter({ target, label }: { target: number; label: string }) {
 }
 
 // ─── Animated Skill Tags ────────────────────────────────────────
-function SkillTags({ skills }: { skills: string }) {
+function SkillTags({ skills, onRemove }: { skills: string; onRemove?: (skill: string) => void }) {
   const tags = skills.split(',').map((s) => s.trim()).filter(Boolean);
   return (
     <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -777,18 +1075,60 @@ function SkillTags({ skills }: { skills: string }) {
           initial={{ opacity: 0, scale: 0.5 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: i * 0.05, type: 'spring', stiffness: 400, damping: 20 }}
-          className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium border border-primary/20"
+          className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium border border-primary/20 hover:scale-105 transition-transform"
         >
           {tag}
+          {onRemove && (
+            <button type="button" onClick={() => onRemove(tag)} className="hover:text-rose-500 transition-colors">
+              <X className="h-2.5 w-2.5" />
+            </button>
+          )}
         </motion.span>
       ))}
     </div>
   );
 }
 
+// ─── Social Proof Section ────────────────────────────────────────
+function SocialProofSection() {
+  const testimonials = [
+    { quote: 'Got my dream job at Google!', role: 'SDE', name: 'Alex' },
+    { quote: 'Perfect for mock interviews', role: 'Frontend Dev', name: 'Sarah' },
+    { quote: 'Adaptive difficulty is game-changing', role: 'Full Stack', name: 'Raj' },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.4 }}
+      className="mt-6"
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {testimonials.map((t, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 + i * 0.1 }}
+            className="p-3 rounded-xl bg-muted/30 border border-border/50 hover:bg-muted/50 hover:-translate-y-0.5 hover:shadow-sm transition-all"
+          >
+            <Quote className="h-3 w-3 text-primary/40 mb-1.5" />
+            <p className="text-xs font-medium leading-relaxed">&ldquo;{t.quote}&rdquo;</p>
+            <div className="flex items-center gap-1.5 mt-2">
+              <Badge variant="secondary" className="text-[9px] py-0">{t.role}</Badge>
+              <span className="text-[10px] text-muted-foreground">— {t.name}</span>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Profile Setup Component ─────────────────────────────────────
 function ProfileSetup() {
-  const { setProfile, startInterview, practiceMode, setPracticeMode } = useInterviewStore();
+  const { setProfile, startInterview, practiceMode, setPracticeMode, selectedQuestionTypes, toggleQuestionType } = useInterviewStore();
   const { toast } = useToast();
   const [form, setForm] = useState({
     role: '' as Role | '',
@@ -808,7 +1148,7 @@ function ProfileSetup() {
       return;
     }
 
-    setProfile({ ...form, practiceMode } as CandidateProfile);
+    setProfile({ ...form, practiceMode, questionTypes: selectedQuestionTypes.length > 0 ? selectedQuestionTypes : undefined } as CandidateProfile);
     startInterview();
   };
 
@@ -859,15 +1199,21 @@ function ProfileSetup() {
     'Full Stack': 140, 'DevOps': 100, 'Data Analyst': 90, 'ML Engineer': 110,
   };
 
+  const questionTypeChips: { type: QuestionType; icon: React.ReactNode; label: string }[] = [
+    { type: 'DSA', icon: <Code2 className="h-3 w-3" />, label: 'DSA' },
+    { type: 'System Design', icon: <Server className="h-3 w-3" />, label: 'System Design' },
+    { type: 'HR/Behavioral', icon: <Users className="h-3 w-3" />, label: 'HR / Behavioral' },
+  ];
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-muted/30 relative overflow-hidden">
-      {/* Background effects */}
       <DotGridBackground />
       <FloatingOrbs />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, x: -50 }}
         transition={{ duration: 0.5 }}
         className="w-full max-w-2xl relative"
       >
@@ -891,7 +1237,6 @@ function ProfileSetup() {
             Practice with an AI interviewer that adapts to your skill level in real-time
           </p>
 
-          {/* Animated Counter */}
           {form.role && (
             <motion.div
               initial={{ opacity: 0, y: 5 }}
@@ -912,15 +1257,18 @@ function ProfileSetup() {
             { icon: <TrendingUp className="h-3 w-3" />, text: 'AI Feedback' },
             { icon: <Lightbulb className="h-3 w-3" />, text: 'Practice Mode' },
           ].map((f) => (
-            <Badge key={f.text} variant="secondary" className="gap-1.5 py-1.5 px-3 text-xs">
+            <Badge key={f.text} variant="secondary" className="gap-1.5 py-1.5 px-3 text-xs hover:scale-105 transition-transform cursor-default">
               {f.icon}
               {f.text}
             </Badge>
           ))}
         </div>
 
+        {/* Social Proof */}
+        <SocialProofSection />
+
         {/* Quick Start */}
-        <div className="mb-4">
+        <div className="mb-4 mt-6">
           <p className="text-xs text-muted-foreground mb-2 text-center">Quick Start</p>
           <div className="flex flex-wrap justify-center gap-2">
             {[
@@ -932,7 +1280,7 @@ function ProfileSetup() {
                 key={preset.label}
                 variant="outline"
                 size="sm"
-                className="text-xs h-7"
+                className="text-xs h-7 hover:scale-105 hover:shadow-sm transition-all"
                 onClick={() => handleQuickStart(preset.role, preset.level)}
               >
                 <Zap className="h-3 w-3 mr-1" />
@@ -967,10 +1315,10 @@ function ProfileSetup() {
                       key={r.value}
                       type="button"
                       onClick={() => setForm((f) => ({ ...f, role: r.value }))}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all active:scale-[0.97] ${
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all active:scale-[0.97] hover:shadow-md ${
                         form.role === r.value
-                          ? 'border-primary bg-primary/5 text-primary shadow-sm'
-                          : 'border-border hover:border-primary/40 hover:bg-muted/50 hover:rotate-[1deg] hover:shadow-md'
+                          ? 'border-primary bg-primary/5 text-primary shadow-sm scale-[1.02]'
+                          : 'border-border hover:border-primary/40 hover:bg-muted/50 hover:rotate-[1deg]'
                       }`}
                     >
                       <div
@@ -999,10 +1347,10 @@ function ProfileSetup() {
                       key={l.value}
                       type="button"
                       onClick={() => setForm((f) => ({ ...f, level: l.value }))}
-                      className={`flex flex-col items-center p-4 rounded-xl border-2 transition-all active:scale-[0.97] ${
+                      className={`flex flex-col items-center p-4 rounded-xl border-2 transition-all active:scale-[0.97] hover:shadow-md ${
                         form.level === l.value
-                          ? 'border-primary bg-primary/5 text-primary shadow-sm'
-                          : 'border-border hover:border-primary/40 hover:bg-muted/50 hover:rotate-[1deg] hover:shadow-md'
+                          ? 'border-primary bg-primary/5 text-primary shadow-sm scale-[1.02]'
+                          : 'border-border hover:border-primary/40 hover:bg-muted/50 hover:rotate-[1deg]'
                       }`}
                     >
                       <span className="text-xl mb-1">{l.emoji}</span>
@@ -1011,6 +1359,38 @@ function ProfileSetup() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Question Focus (Optional) */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <Target className="h-4 w-4" />
+                  Question Focus <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {questionTypeChips.map((chip) => {
+                    const isSelected = selectedQuestionTypes.includes(chip.type);
+                    return (
+                      <button
+                        key={chip.type}
+                        type="button"
+                        onClick={() => toggleQuestionType(chip.type)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all hover:shadow-sm ${
+                          isSelected
+                            ? 'border-primary bg-primary/10 text-primary shadow-sm scale-105'
+                            : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                        }`}
+                      >
+                        {chip.icon}
+                        {chip.label}
+                        {isSelected && <Check className="h-3 w-3" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedQuestionTypes.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground">Questions will focus on: {selectedQuestionTypes.join(', ')}</p>
+                )}
               </div>
 
               {/* Skills - Animated Tags */}
@@ -1031,30 +1411,14 @@ function ProfileSetup() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-11 px-3"
+                    className="h-11 px-3 hover:scale-105 transition-transform"
                     onClick={() => addSkill(skillInput)}
                     disabled={!skillInput.trim()}
                   >
                     Add
                   </Button>
                 </div>
-                {form.skills && <SkillTags skills={form.skills} />}
-                {/* Hidden X on skill tags */}
-                {form.skills && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {form.skills.split(',').map((s, i) => s.trim() && (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => removeSkill(s.trim())}
-                        className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
-                      >
-                        {s.trim()}
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {form.skills && <SkillTags skills={form.skills} onRemove={removeSkill} />}
                 <p className="text-xs text-muted-foreground">
                   Press Enter or comma to add skills
                 </p>
@@ -1084,7 +1448,7 @@ function ProfileSetup() {
               </div>
 
               {/* Practice Mode Toggle */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20 hover:shadow-sm transition-all">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                     <Lightbulb className="h-4 w-4 text-primary" />
@@ -1111,10 +1475,10 @@ function ProfileSetup() {
 
               <Separator />
 
-              {/* Start Button - Gradient */}
+              {/* Start Button - Gradient + Glow */}
               <Button
                 onClick={handleSubmit}
-                className="w-full h-12 text-base font-semibold gap-2 hover:scale-[1.01] active:scale-[0.99] transition-transform shadow-lg shadow-primary/20 bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary text-primary-foreground"
+                className="w-full h-12 text-base font-semibold gap-2 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-lg shadow-primary/20 bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary hover:shadow-primary/30 text-primary-foreground btn-ripple"
                 size="lg"
                 disabled={!form.role || !form.level}
               >
@@ -1211,7 +1575,6 @@ function StatsPanel({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className={`space-y-4 ${compact ? 'p-4' : ''}`}>
-      {/* Profile Summary - Glass */}
       {profile && (
         <Card className="border bg-background/50 backdrop-blur-md border-white/10 dark:border-white/5">
           <CardHeader className="pb-3">
@@ -1231,9 +1594,7 @@ function StatsPanel({ compact = false }: { compact?: boolean }) {
                 <span className="text-xs text-muted-foreground">Skills</span>
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {profile.skills.split(',').map((s, i) => (
-                    <Badge key={i} variant="outline" className="text-xs py-0">
-                      {s.trim()}
-                    </Badge>
+                    <Badge key={i} variant="outline" className="text-xs py-0">{s.trim()}</Badge>
                   ))}
                 </div>
               </div>
@@ -1242,7 +1603,6 @@ function StatsPanel({ compact = false }: { compact?: boolean }) {
         </Card>
       )}
 
-      {/* Question Stats - Glass */}
       <Card className="border bg-background/50 backdrop-blur-md border-white/10 dark:border-white/5">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1256,7 +1616,6 @@ function StatsPanel({ compact = false }: { compact?: boolean }) {
             <div className="text-xs text-muted-foreground mt-0.5">Questions Asked</div>
           </div>
 
-          {/* Type Distribution */}
           <div className="space-y-2.5">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">By Type</div>
             <div className="space-y-2.5">
@@ -1285,7 +1644,6 @@ function StatsPanel({ compact = false }: { compact?: boolean }) {
             </div>
           </div>
 
-          {/* Difficulty Distribution - with hover lift */}
           <div className="space-y-2.5">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">By Difficulty</div>
             <div className="grid grid-cols-3 gap-2">
@@ -1304,12 +1662,11 @@ function StatsPanel({ compact = false }: { compact?: boolean }) {
         </CardContent>
       </Card>
 
-      {/* End Interview Button */}
       {phase === 'interview' && stats.totalQuestions >= 1 && (
         <AlertDialog>
           <Button
             variant="outline"
-            className="w-full gap-2 hover:bg-rose-500/10 hover:text-rose-600 hover:border-rose-500/30 transition-colors"
+            className="w-full gap-2 hover:bg-rose-500/10 hover:text-rose-600 hover:border-rose-500/30 hover:shadow-sm transition-all"
             onClick={completeInterview}
           >
             <Trophy className="h-4 w-4" />
@@ -1335,7 +1692,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-muted/80"
+      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-muted/80 hover:scale-110 transition-transform"
       title="Copy question"
     >
       {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
@@ -1348,10 +1705,24 @@ function BookmarkButton({ messageId, isBookmarked, onToggle }: { messageId: stri
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onToggle(messageId); }}
-      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-muted/80"
+      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-muted/80 hover:scale-110 transition-transform"
       title={isBookmarked ? 'Remove bookmark' : 'Bookmark this question'}
     >
       <Bookmark className={`h-3 w-3 ${isBookmarked ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground'}`} />
+    </button>
+  );
+}
+
+// ─── TTS Button ─────────────────────────────────────────────────
+function TTSButton({ text, messageId, speakingId, onSpeak }: { text: string; messageId: string; speakingId: string | null; onSpeak: (text: string, id: string) => void }) {
+  const isSpeaking = speakingId === messageId;
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onSpeak(text, messageId); }}
+      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-muted/80 hover:scale-110 transition-transform"
+      title={isSpeaking ? 'Stop reading' : 'Read question aloud'}
+    >
+      {isSpeaking ? <VolumeX className="h-3 w-3 text-primary" /> : <Volume2 className="h-3 w-3 text-muted-foreground" />}
     </button>
   );
 }
@@ -1385,13 +1756,16 @@ const messageContainerVariants = {
 };
 
 // ─── Message Bubble ──────────────────────────────────────────────
-function MessageBubble({ message, questionIndex, questionStartTime, isBookmarked, onToggleBookmark, questionScore }: {
+function MessageBubble({ message, questionIndex, questionStartTime, isBookmarked, onToggleBookmark, questionScore, speakingId, onSpeak, relativeTime }: {
   message: InterviewMessage;
   questionIndex?: number;
   questionStartTime?: Date | null;
   isBookmarked?: boolean;
   onToggleBookmark?: (id: string) => void;
   questionScore?: { score: number; feedback: string } | null;
+  speakingId?: string | null;
+  onSpeak?: (text: string, id: string) => void;
+  relativeTime?: string;
 }) {
   const isInterviewer = message.role === 'interviewer';
   const isSystem = message.role === 'system';
@@ -1415,7 +1789,6 @@ function MessageBubble({ message, questionIndex, questionStartTime, isBookmarked
     );
   }
 
-  // Hint message
   if (isHint) {
     return (
       <motion.div
@@ -1458,7 +1831,6 @@ function MessageBubble({ message, questionIndex, questionStartTime, isBookmarked
             : 'bg-primary text-primary-foreground rounded-2xl rounded-tr-md shadow-sm'
         } px-4 py-3`}
       >
-        {/* Question metadata */}
         {isInterviewer && message.questionType && message.difficulty && (
           <div className="flex items-center gap-1.5 flex-wrap">
             {questionIndex !== undefined && (
@@ -1472,7 +1844,6 @@ function MessageBubble({ message, questionIndex, questionStartTime, isBookmarked
           <MessageContent content={message.content} />
         </div>
 
-        {/* Question score for candidate messages */}
         {!isInterviewer && questionScore && (
           <div className="flex items-center gap-1.5 pt-1">
             <StarRating score={questionScore.score} />
@@ -1480,15 +1851,23 @@ function MessageBubble({ message, questionIndex, questionStartTime, isBookmarked
           </div>
         )}
 
-        <div className={`flex items-center justify-between ${isInterviewer ? '' : ''}`}>
-          <div className={`text-[10px] ${isInterviewer ? 'text-muted-foreground' : 'text-primary-foreground/60'}`}>
-            {new Date(message.timestamp).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <div className={`text-[10px] ${isInterviewer ? 'text-muted-foreground' : 'text-primary-foreground/60'}`}>
+              {new Date(message.timestamp).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </div>
+            {relativeTime && (
+              <span className={`text-[10px] ${isInterviewer ? 'text-muted-foreground/60' : 'text-primary-foreground/40'}`}>
+                · {relativeTime}
+              </span>
+            )}
           </div>
           {isInterviewer && (
             <div className="flex items-center gap-0.5">
+              <TTSButton text={message.content} messageId={message.id} speakingId={speakingId || null} onSpeak={onSpeak || (() => {})} />
               <BookmarkButton messageId={message.id} isBookmarked={!!isBookmarked} onToggle={onToggleBookmark || (() => {})} />
               <CopyButton text={message.content} />
             </div>
@@ -1505,7 +1884,7 @@ function MessageBubble({ message, questionIndex, questionStartTime, isBookmarked
   );
 }
 
-// ─── 3-Dot Bouncing Typing Indicator ────────────────────────────
+// ─── Enhanced Typing Indicator ──────────────────────────────────
 function TypingIndicator() {
   return (
     <motion.div
@@ -1534,33 +1913,32 @@ function TypingIndicator() {
               />
             ))}
           </div>
-          <span className="text-xs text-muted-foreground">Generating question...</span>
+          <span className="text-xs text-muted-foreground">Analyzing your response...</span>
         </div>
       </div>
     </motion.div>
   );
 }
 
-// ─── Skeleton Loading State ──────────────────────────────────────
-function ChatSkeleton() {
+// ─── Enhanced Empty Chat State ──────────────────────────────────
+function EmptyChatState() {
   return (
-    <div className="space-y-4 p-4">
-      {/* Interviewer skeleton */}
-      <div className="flex gap-2.5">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full skeleton-shimmer" />
-        <div className="space-y-2 flex-1 max-w-[75%]">
-          <div className="h-4 skeleton-shimmer rounded-full w-3/4" />
-          <div className="h-4 skeleton-shimmer rounded-full w-1/2" />
-        </div>
+    <div className="flex flex-col items-center justify-center h-full gap-4 p-8">
+      <motion.div
+        animate={{ scale: [1, 1.05, 1] }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center brain-pulse-glow"
+      >
+        <Brain className="h-8 w-8 text-primary" />
+      </motion.div>
+      <div className="text-center">
+        <p className="text-sm font-medium">Your interview will begin shortly</p>
+        <p className="text-xs text-muted-foreground mt-1">The AI is preparing your first question...</p>
       </div>
-      {/* Another interviewer line */}
-      <div className="flex gap-2.5">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full skeleton-shimmer" />
-        <div className="space-y-2 flex-1 max-w-[75%]">
-          <div className="h-4 skeleton-shimmer rounded-full w-2/3" />
-          <div className="h-4 skeleton-shimmer rounded-full w-5/6" />
-          <div className="h-4 skeleton-shimmer rounded-full w-1/3" />
-        </div>
+      <div className="w-full max-w-xs space-y-2">
+        <div className="h-3 skeleton-shimmer rounded-full w-full" />
+        <div className="h-3 skeleton-shimmer rounded-full w-3/4" />
+        <div className="h-3 skeleton-shimmer rounded-full w-5/6" />
       </div>
     </div>
   );
@@ -1588,6 +1966,8 @@ function InterviewChat() {
     practiceMode,
     questionScores,
     setQuestionScore,
+    isPaused,
+    togglePause,
   } = useInterviewStore();
   const { toast } = useToast();
   const [input, setInput] = useState('');
@@ -1597,13 +1977,16 @@ function InterviewChat() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useAutoResizeTextarea(input);
-  const elapsed = useElapsedTime(interviewStartTime);
+  const elapsed = useElapsedTime(interviewStartTime, isPaused);
 
   // Voice input
   const handleVoiceTranscript = useCallback((text: string) => {
     setInput(text);
   }, []);
   const { isListening, toggleListening } = useVoiceInput(handleVoiceTranscript);
+
+  // TTS
+  const { speakingId, speak, stop: stopTTS } = useTTS();
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -1624,7 +2007,11 @@ function InterviewChat() {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'k') {
         e.preventDefault();
-        handleSkip();
+        if (!isPaused) handleSkip();
+      }
+      if (e.ctrlKey && e.key === 'p') {
+        e.preventDefault();
+        togglePause();
       }
       if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
         const target = e.target as HTMLElement;
@@ -1664,7 +2051,7 @@ function InterviewChat() {
       const res = await fetch('/api/interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start', profile }),
+        body: JSON.stringify({ action: 'start', profile, questionTypes: profile.questionTypes }),
       });
 
       const data = await res.json();
@@ -1691,7 +2078,6 @@ function InterviewChat() {
     }
   };
 
-  // Auto-evaluate answer after sending
   const evaluateAnswer = async (questionId: string, question: string, answer: string) => {
     if (!profile) return;
     try {
@@ -1715,7 +2101,7 @@ function InterviewChat() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isPaused) return;
 
     const candidateMsg: InterviewMessage = {
       id: crypto.randomUUID(),
@@ -1729,7 +2115,6 @@ function InterviewChat() {
     setInput('');
     setIsLoading(true);
 
-    // Find the last interviewer question for evaluation
     const lastInterviewerMsg = [...messages].reverse().find((m) => m.role === 'interviewer');
     if (lastInterviewerMsg) {
       evaluateAnswer(candidateMsg.id, lastInterviewerMsg.content, answerText);
@@ -1748,6 +2133,7 @@ function InterviewChat() {
             questionType: m.questionType,
             difficulty: m.difficulty,
           })),
+          questionTypes: profile.questionTypes,
         }),
       });
 
@@ -1777,7 +2163,7 @@ function InterviewChat() {
   };
 
   const handleSkip = async () => {
-    if (isLoading) return;
+    if (isLoading || isPaused) return;
 
     addMessage({
       id: crypto.randomUUID(),
@@ -1800,6 +2186,7 @@ function InterviewChat() {
             questionType: m.questionType,
             difficulty: m.difficulty,
           })),
+          questionTypes: profile.questionTypes,
         }),
       });
 
@@ -1827,7 +2214,7 @@ function InterviewChat() {
   };
 
   const handleHint = async () => {
-    if (isLoading || !practiceMode) return;
+    if (isLoading || !practiceMode || isPaused) return;
 
     const lastInterviewerMsg = [...messages].reverse().find((m) => m.role === 'interviewer');
     if (!lastInterviewerMsg) return;
@@ -1877,6 +2264,7 @@ function InterviewChat() {
   };
 
   const handleReset = () => {
+    stopTTS();
     resetInterview();
     setInterviewStarted(false);
   };
@@ -1885,7 +2273,6 @@ function InterviewChat() {
     return <InterviewSummary onRestart={handleReset} />;
   }
 
-  // Find the last interviewer question for pairing with candidate answers
   const getLastInterviewerIdBefore = (msgIndex: number) => {
     for (let i = msgIndex - 1; i >= 0; i--) {
       if (messages[i].role === 'interviewer') return messages[i].id;
@@ -1904,8 +2291,8 @@ function InterviewChat() {
           <div>
             <span className="font-bold text-sm">AI Interviewer</span>
             <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] text-muted-foreground">Live Session</span>
+              <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isPaused ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <span className="text-[10px] text-muted-foreground">{isPaused ? 'Paused' : 'Live Session'}</span>
             </div>
           </div>
         </div>
@@ -1919,13 +2306,13 @@ function InterviewChat() {
         {/* Top Bar - Glass */}
         <header className="h-14 border-b flex items-center justify-between px-3 sm:px-4 flex-shrink-0 bg-background/50 backdrop-blur-xl">
           <div className="flex items-center gap-2 sm:gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setShowResetDialog(true)} className="lg:hidden h-9 w-9">
+            <Button variant="ghost" size="icon" onClick={() => setShowResetDialog(true)} className="lg:hidden h-9 w-9 hover:scale-110 transition-transform">
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-sm font-medium hidden sm:inline">Interview in Progress</span>
-              <span className="text-sm font-medium sm:hidden">Live</span>
+              <span className={`w-2 h-2 rounded-full animate-pulse ${isPaused ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <span className="text-sm font-medium hidden sm:inline">{isPaused ? 'Interview Paused' : 'Interview in Progress'}</span>
+              <span className="text-sm font-medium sm:hidden">{isPaused ? 'Paused' : 'Live'}</span>
             </div>
             <Badge variant="outline" className="text-xs tabular-nums gap-1">
               <Timer className="h-3 w-3" />
@@ -1935,6 +2322,12 @@ function InterviewChat() {
             <Badge variant="outline" className="text-xs tabular-nums">
               Q{stats.totalQuestions}
             </Badge>
+            {isPaused && (
+              <Badge className="text-xs gap-1 bg-amber-500/10 text-amber-600 border-amber-500/20">
+                <Pause className="h-2.5 w-2.5" />
+                Paused
+              </Badge>
+            )}
             {bookmarkedQuestions.length > 0 && (
               <Badge variant="secondary" className="text-xs gap-1 hidden sm:inline-flex">
                 <Bookmark className="h-3 w-3 fill-amber-400 text-amber-400" />
@@ -1950,10 +2343,29 @@ function InterviewChat() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* Pause/Resume Button */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setShowShortcuts(true)}>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className={`h-9 w-9 hover:scale-110 transition-transform ${isPaused ? 'border-amber-500/30 text-amber-600 bg-amber-500/10' : ''}`}
+                    onClick={togglePause}
+                  >
+                    {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isPaused ? 'Resume interview (Ctrl+P)' : 'Pause interview (Ctrl+P)'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 hover:scale-110 transition-transform" onClick={() => setShowShortcuts(true)}>
                     <HelpCircle className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
@@ -1968,7 +2380,7 @@ function InterviewChat() {
             {/* Mobile Stats Button */}
             <Sheet open={mobileStatsOpen} onOpenChange={setMobileStatsOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="lg:hidden h-9 w-9">
+                <Button variant="ghost" size="icon" className="lg:hidden h-9 w-9 hover:scale-110 transition-transform">
                   <PanelLeftOpen className="h-4 w-4" />
                 </Button>
               </SheetTrigger>
@@ -1990,23 +2402,21 @@ function InterviewChat() {
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1 text-xs lg:hidden h-9"
+              className="gap-1 text-xs lg:hidden h-9 hover:scale-105 transition-transform"
               onClick={completeInterview}
               disabled={stats.totalQuestions < 1}
             >
               <Trophy className="h-3.5 w-3.5" />
               End
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setShowResetDialog(true)} className="h-9 w-9">
+            <Button variant="ghost" size="icon" onClick={() => setShowResetDialog(true)} className="h-9 w-9 hover:scale-110 transition-transform hover:text-rose-500">
               <RotateCcw className="h-4 w-4" />
             </Button>
           </div>
         </header>
 
-        {/* Keyboard Shortcuts Overlay */}
         <KeyboardShortcutsOverlay open={showShortcuts} onClose={() => setShowShortcuts(false)} />
 
-        {/* Reset Confirmation Dialog */}
         <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -2030,7 +2440,7 @@ function InterviewChat() {
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 scroll-smooth custom-scrollbar">
           {messages.length === 0 && !isLoading && (
-            <ChatSkeleton />
+            <EmptyChatState />
           )}
 
           <motion.div
@@ -2044,26 +2454,29 @@ function InterviewChat() {
                 if (msg.role === 'interviewer' && msg.questionType) {
                   qi++;
                   return (
-                    <MessageBubble
+                    <MessageBubbleWithTime
                       key={msg.id}
                       message={msg}
                       questionIndex={qi}
                       questionStartTime={questionStartTime}
                       isBookmarked={bookmarkedQuestions.includes(msg.id)}
                       onToggleBookmark={toggleBookmark}
+                      speakingId={speakingId}
+                      onSpeak={speak}
                     />
                   );
                 }
-                // For candidate messages, find the corresponding question score
                 const lastInterviewerId = getLastInterviewerIdBefore(idx);
                 const score = msg.role === 'candidate' && lastInterviewerId
                   ? questionScores[msg.id] || null
                   : undefined;
                 return (
-                  <MessageBubble
+                  <MessageBubbleWithTime
                     key={msg.id}
                     message={msg}
                     questionScore={score}
+                    speakingId={speakingId}
+                    onSpeak={speak}
                   />
                 );
               });
@@ -2075,115 +2488,133 @@ function InterviewChat() {
           </AnimatePresence>
         </div>
 
-        {/* Input Area - Glass */}
-        <div className="border-t p-3 sm:p-4 flex-shrink-0 bg-background/50 backdrop-blur-xl no-print">
-          <div className="max-w-3xl mx-auto">
-            <div className="flex gap-2 items-end">
-              {/* Voice Input Button */}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className={`h-11 w-11 flex-shrink-0 rounded-xl ${isListening ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 animate-pulse' : ''}`}
-                      onClick={toggleListening}
-                    >
-                      {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{isListening ? 'Stop recording' : 'Voice input'}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <div className="flex-1 relative">
-                <Textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Type your answer... (Enter or Ctrl+Enter to send)"
-                  disabled={isLoading}
-                  className="min-h-[44px] max-h-40 resize-none rounded-xl pr-4 py-3 text-sm"
-                  rows={1}
-                />
-                {isListening && (
-                  <div className="absolute top-1 right-2 flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                    <span className="text-[10px] text-rose-500">Recording</span>
-                  </div>
-                )}
+        {/* Input Area - Glass + Pause Overlay */}
+        <div className="relative border-t flex-shrink-0 bg-background/50 backdrop-blur-xl no-print">
+          {isPaused && (
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center">
+              <div className="flex items-center gap-2 text-sm font-medium text-amber-600">
+                <Pause className="h-4 w-4" />
+                Interview Paused
               </div>
-              {/* Hint button (practice mode only) */}
-              {practiceMode && (
+            </div>
+          )}
+          <div className="p-3 sm:p-4">
+            <div className="max-w-3xl mx-auto">
+              <div className="flex gap-2 items-end">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        onClick={handleHint}
-                        disabled={isLoading || stats.totalQuestions < 1}
                         variant="outline"
                         size="icon"
-                        className="h-11 w-11 flex-shrink-0 rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
-                        title="Get a hint"
+                        className={`h-11 w-11 flex-shrink-0 rounded-xl hover:scale-110 transition-transform ${isListening ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 animate-pulse' : ''}`}
+                        onClick={toggleListening}
+                        disabled={isPaused}
                       >
-                        <Lightbulb className="h-4 w-4" />
+                        {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Get a hint</p>
+                      <p>{isListening ? 'Stop recording' : 'Voice input'}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              )}
-              <Button
-                onClick={handleSkip}
-                disabled={isLoading || stats.totalQuestions < 1}
-                variant="outline"
-                size="icon"
-                className="h-11 w-11 flex-shrink-0 rounded-xl"
-                title="Skip question (Ctrl+K)"
-              >
-                <SkipForward className="h-4 w-4" />
-              </Button>
-              <Button
-                onClick={handleSend}
-                disabled={isLoading || !input.trim()}
-                size="icon"
-                className="h-11 w-11 flex-shrink-0 rounded-xl shadow-sm"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex items-center justify-between mt-1.5">
-              <p className="text-[10px] text-muted-foreground">
-                Enter to send · Shift+Enter new line · Ctrl+K skip
-              </p>
-              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                <HelpCircle className="h-3 w-3" />
-                Press ? for shortcuts
-              </p>
+
+                <div className="flex-1 relative">
+                  <Textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={isPaused ? 'Interview is paused...' : 'Type your answer... (Enter or Ctrl+Enter to send)'}
+                    disabled={isLoading || isPaused}
+                    className="min-h-[44px] max-h-40 resize-none rounded-xl pr-4 py-3 text-sm"
+                    rows={1}
+                  />
+                  {isListening && (
+                    <div className="absolute top-1 right-2 flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                      <span className="text-[10px] text-rose-500">Recording</span>
+                    </div>
+                  )}
+                </div>
+                {practiceMode && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={handleHint}
+                          disabled={isLoading || stats.totalQuestions < 1 || isPaused}
+                          variant="outline"
+                          size="icon"
+                          className="h-11 w-11 flex-shrink-0 rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:scale-110 transition-transform"
+                          title="Get a hint"
+                        >
+                          <Lightbulb className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Get a hint</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                <Button
+                  onClick={handleSkip}
+                  disabled={isLoading || stats.totalQuestions < 1 || isPaused}
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 flex-shrink-0 rounded-xl hover:scale-110 transition-transform"
+                  title="Skip question (Ctrl+K)"
+                >
+                  <SkipForward className="h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={handleSend}
+                  disabled={isLoading || !input.trim() || isPaused}
+                  size="icon"
+                  className="h-11 w-11 flex-shrink-0 rounded-xl shadow-sm btn-ripple hover:shadow-primary/20 hover:scale-110 transition-all"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex items-center justify-between mt-1.5">
+                <p className="text-[10px] text-muted-foreground">
+                  Enter to send · Shift+Enter new line · Ctrl+K skip · Ctrl+P pause
+                </p>
+                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <HelpCircle className="h-3 w-3" />
+                  Press ? for shortcuts
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Mobile Bottom Bar - visible on md: and below */}
+        {/* Mobile Bottom Bar */}
         <div className="md:hidden flex items-center gap-2 p-2 border-t bg-background/80 backdrop-blur-xl no-print">
           <Button
             onClick={handleSend}
-            disabled={isLoading || !input.trim()}
-            className="flex-1 h-10 gap-1 text-xs"
+            disabled={isLoading || !input.trim() || isPaused}
+            className="flex-1 h-10 gap-1 text-xs btn-ripple"
             size="sm"
           >
             <Send className="h-3.5 w-3.5" />
             Send
           </Button>
+          <Button
+            onClick={togglePause}
+            variant="outline"
+            className={`h-10 gap-1 text-xs ${isPaused ? 'border-amber-500/30 text-amber-600' : ''}`}
+            size="sm"
+          >
+            {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+            {isPaused ? 'Resume' : 'Pause'}
+          </Button>
           {practiceMode && (
             <Button
               onClick={handleHint}
-              disabled={isLoading || stats.totalQuestions < 1}
+              disabled={isLoading || stats.totalQuestions < 1 || isPaused}
               variant="outline"
               className="h-10 gap-1 text-xs border-amber-500/30 text-amber-600"
               size="sm"
@@ -2194,7 +2625,7 @@ function InterviewChat() {
           )}
           <Button
             onClick={handleSkip}
-            disabled={isLoading || stats.totalQuestions < 1}
+            disabled={isLoading || stats.totalQuestions < 1 || isPaused}
             variant="outline"
             className="h-10 gap-1 text-xs"
             size="sm"
@@ -2216,6 +2647,21 @@ function InterviewChat() {
       </main>
     </div>
   );
+}
+
+// ─── MessageBubble with Relative Time ───────────────────────────
+function MessageBubbleWithTime(props: {
+  message: InterviewMessage;
+  questionIndex?: number;
+  questionStartTime?: Date | null;
+  isBookmarked?: boolean;
+  onToggleBookmark?: (id: string) => void;
+  questionScore?: { score: number; feedback: string } | null;
+  speakingId?: string | null;
+  onSpeak?: (text: string, id: string) => void;
+}) {
+  const relTime = useRelativeTime(props.message.timestamp);
+  return <MessageBubble {...props} relativeTime={relTime} />;
 }
 
 // ─── Feedback Section ────────────────────────────────────────────
@@ -2240,7 +2686,6 @@ function FeedbackSection({ feedback, isLoading }: { feedback: { overallScore: nu
 
   return (
     <Card className="border-2 border-primary/20 overflow-hidden print-card">
-      {/* Header with shimmer */}
       <div className="bg-primary/5 px-6 py-4 border-b relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent animate-shimmer" />
         <div className="flex items-center justify-between relative">
@@ -2252,12 +2697,10 @@ function FeedbackSection({ feedback, isLoading }: { feedback: { overallScore: nu
         </div>
       </div>
       <CardContent className="p-6 space-y-5">
-        {/* Score Donut */}
         <div className="flex justify-center py-2">
           <ScoreDonut score={feedback.overallScore} />
         </div>
 
-        {/* Performance Radar Chart */}
         <div className="flex justify-center py-2">
           <PerformanceRadar scores={{
             DSA: Math.min(5, Math.max(1, Math.round(feedback.overallScore / 2))),
@@ -2268,12 +2711,10 @@ function FeedbackSection({ feedback, isLoading }: { feedback: { overallScore: nu
           }} />
         </div>
 
-        {/* Summary */}
         <div className="p-3 rounded-lg bg-muted/50 border">
           <p className="text-sm leading-relaxed">{feedback.summary}</p>
         </div>
 
-        {/* Strengths */}
         <div className="space-y-2.5">
           <div className="flex items-center gap-2 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="h-4 w-4" />
@@ -2295,7 +2736,6 @@ function FeedbackSection({ feedback, isLoading }: { feedback: { overallScore: nu
           </ul>
         </div>
 
-        {/* Improvements */}
         <div className="space-y-2.5">
           <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
             <Lightbulb className="h-4 w-4" />
@@ -2321,6 +2761,39 @@ function FeedbackSection({ feedback, isLoading }: { feedback: { overallScore: nu
   );
 }
 
+// ─── Session Comparison ──────────────────────────────────────────
+function SessionComparison({ currentScore }: { currentScore: number }) {
+  const { history } = useInterviewStore();
+  const pastScores = history.filter((h) => h.score !== null).map((h) => h.score as number);
+
+  if (pastScores.length === 0) return null;
+
+  const avgPastScore = Math.round((pastScores.reduce((a, b) => a + b, 0) / pastScores.length) * 10) / 10;
+  const delta = Math.round((currentScore - avgPastScore) * 10) / 10;
+  const isUp = delta > 0;
+  const isSame = delta === 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.6 }}
+      className="flex items-center justify-center gap-3 p-3 rounded-xl bg-muted/40 border border-border/50"
+    >
+      <span className="text-xs text-muted-foreground">vs Previous Avg</span>
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm font-bold">{avgPastScore}</span>
+        <span className="text-xs text-muted-foreground">→</span>
+        <span className="text-sm font-bold">{currentScore}</span>
+        <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${isSame ? 'text-muted-foreground' : isUp ? 'text-emerald-600' : 'text-rose-600'}`}>
+          {isSame ? '—' : isUp ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+          {isSame ? '0' : Math.abs(delta)}
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Interview Summary ───────────────────────────────────────────
 function InterviewSummary({ onRestart }: { onRestart: () => void }) {
   const { stats, profile, messages, feedback, feedbackLoading, setFeedback, setFeedbackLoading, interviewStartTime, saveToHistory, bookmarkedQuestions, questionScores } = useInterviewStore();
@@ -2343,7 +2816,6 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
     return 'Solid foundation — keep practicing!';
   };
 
-  // Request AI feedback on mount
   useEffect(() => {
     if (!feedbackRequested && profile && messages.length > 0) {
       setFeedbackRequested(true);
@@ -2351,7 +2823,6 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
     }
   }, [feedbackRequested, profile, messages]);
 
-  // Save to history when feedback arrives
   useEffect(() => {
     if (feedback && profile) {
       const entry: InterviewHistoryEntry = {
@@ -2363,6 +2834,13 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
         questionCount: stats.totalQuestions,
         duration: computeDurationMinutes(interviewStartTime),
         skills: profile.skills,
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          questionType: m.questionType,
+          difficulty: m.difficulty,
+          timestamp: new Date(m.timestamp).toISOString(),
+        })),
       };
       saveToHistory(entry);
 
@@ -2450,10 +2928,8 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
     toast({ title: 'Copied!', description: 'Transcript copied to clipboard' });
   };
 
-  // Get bookmarked questions
   const bookmarkedMessages = messages.filter((m) => bookmarkedQuestions.includes(m.id));
 
-  // Get Q&A pairs for summary
   const qaPairs: Array<{ question: InterviewMessage; answer?: InterviewMessage; score?: { score: number; feedback: string } }> = [];
   for (let i = 0; i < messages.length; i++) {
     if (messages[i].role === 'interviewer' && messages[i].questionType) {
@@ -2471,8 +2947,9 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
       </div>
 
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
+        initial={{ opacity: 0, x: 50 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -50 }}
         transition={{ duration: 0.5 }}
         className="w-full max-w-lg relative"
       >
@@ -2480,7 +2957,6 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
           <ThemeToggle />
         </div>
 
-        {/* Print Header (only visible in print) */}
         <div className="hidden print-header" style={{ display: 'none' }}>
           <h1>Interview Report</h1>
           <p>{profile?.role} ({profile?.level}) · {new Date().toLocaleDateString()}</p>
@@ -2500,8 +2976,10 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
         </div>
 
         <div className="space-y-4">
-          {/* AI Feedback */}
           <FeedbackSection feedback={feedback} isLoading={feedbackLoading} />
+
+          {/* Session Comparison */}
+          {feedback && <SessionComparison currentScore={feedback.overallScore} />}
 
           {/* Session Stats - Glass */}
           <Card className="border-2 shadow-xl shadow-black/5 bg-background/50 backdrop-blur-md border-white/10 dark:border-white/5 print-card">
@@ -2512,17 +2990,16 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Overview Stats */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="text-center p-3 rounded-xl bg-muted/50 border">
+                <div className="text-center p-3 rounded-xl bg-muted/50 border hover:-translate-y-0.5 hover:shadow-sm transition-all">
                   <div className="text-2xl font-bold tabular-nums">{stats.totalQuestions}</div>
                   <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Questions</div>
                 </div>
-                <div className="text-center p-3 rounded-xl bg-muted/50 border">
+                <div className="text-center p-3 rounded-xl bg-muted/50 border hover:-translate-y-0.5 hover:shadow-sm transition-all">
                   <div className="text-2xl font-bold">{interviewDuration()}</div>
                   <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Duration</div>
                 </div>
-                <div className="text-center p-3 rounded-xl bg-muted/50 border">
+                <div className="text-center p-3 rounded-xl bg-muted/50 border hover:-translate-y-0.5 hover:shadow-sm transition-all">
                   <div className="text-2xl font-bold">
                     {stats.totalQuestions > 0 ? Math.round((stats.mediumCount + stats.hardCount) / stats.totalQuestions * 100) : 0}%
                   </div>
@@ -2530,7 +3007,9 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
                 </div>
               </div>
 
-              {/* Profile */}
+              {/* Difficulty Curve Chart */}
+              <DifficultyCurveChart messages={messages} />
+
               {profile && (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/50 border">
                   <Briefcase className="h-4 w-4 text-muted-foreground flex-shrink-0" />
@@ -2540,7 +3019,6 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
                 </div>
               )}
 
-              {/* Type Breakdown */}
               <div className="space-y-3">
                 <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Question Types</div>
                 {[
@@ -2558,7 +3036,6 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
                 ))}
               </div>
 
-              {/* Difficulty Breakdown */}
               <div className="space-y-3">
                 <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Difficulty Levels</div>
                 {[
@@ -2585,7 +3062,6 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
                 ))}
               </div>
 
-              {/* Per-Question Scores */}
               {qaPairs.length > 0 && Object.keys(questionScores).length > 0 && (
                 <div className="space-y-3">
                   <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Per-Question Scores</div>
@@ -2607,7 +3083,6 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
                 </div>
               )}
 
-              {/* Bookmarked Questions */}
               {bookmarkedMessages.length > 0 && (
                 <div className="space-y-3">
                   <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
@@ -2615,8 +3090,7 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
                     Bookmarked Questions ({bookmarkedMessages.length})
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                    {bookmarkedMessages.map((msg, i) => {
-                      // Find the answer that follows this question
+                    {bookmarkedMessages.map((msg) => {
                       const msgIdx = messages.indexOf(msg);
                       const answer = messages[msgIdx + 1]?.role === 'candidate' ? messages[msgIdx + 1] : null;
                       return (
@@ -2640,11 +3114,10 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
 
               <Separator />
 
-              {/* Export Buttons */}
               <div className="flex gap-2 no-print">
                 <Button
                   variant="outline"
-                  className="flex-1 gap-2"
+                  className="flex-1 gap-2 hover:shadow-sm hover:scale-[1.02] transition-all"
                   onClick={handleDownloadPDF}
                 >
                   <Printer className="h-4 w-4" />
@@ -2652,7 +3125,7 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
                 </Button>
                 <Button
                   variant="outline"
-                  className="flex-1 gap-2"
+                  className="flex-1 gap-2 hover:shadow-sm hover:scale-[1.02] transition-all"
                   onClick={handleCopyTranscript}
                 >
                   {exportCopied ? <Check className="h-4 w-4 text-emerald-500" /> : <ClipboardCopy className="h-4 w-4" />}
@@ -2663,7 +3136,7 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
               <Button
                 onClick={handleExportJSON}
                 variant="outline"
-                className="w-full gap-2 no-print"
+                className="w-full gap-2 no-print hover:shadow-sm hover:scale-[1.01] transition-all"
               >
                 <FileJson className="h-4 w-4" />
                 Export JSON
@@ -2671,7 +3144,7 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
 
               <Button
                 onClick={onRestart}
-                className="w-full h-12 text-base font-semibold gap-2 shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-transform bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary text-primary-foreground no-print"
+                className="w-full h-12 text-base font-semibold gap-2 shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-transform bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary hover:shadow-primary/30 text-primary-foreground btn-ripple no-print"
                 size="lg"
               >
                 <RotateCcw className="h-5 w-5" />
@@ -2685,19 +3158,53 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
   );
 }
 
+// ─── Phase Transition Variants ───────────────────────────────────
+const phaseVariants = {
+  enter: { opacity: 0, x: 50 },
+  center: { opacity: 1, x: 0 },
+  exit: { opacity: 0, x: -50 },
+};
+
 // ─── Main Page ───────────────────────────────────────────────────
 export default function Home() {
   const { phase } = useInterviewStore();
 
   return (
     <AnimatePresence mode="wait">
-      {phase === 'setup' ? (
-        <motion.div key="setup" exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      {phase === 'setup' && (
+        <motion.div
+          key="setup"
+          variants={phaseVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ duration: 0.4, ease: 'easeInOut' }}
+        >
           <ProfileSetup />
         </motion.div>
-      ) : (
-        <motion.div key="interview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+      )}
+      {phase === 'interview' && (
+        <motion.div
+          key="interview"
+          variants={phaseVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ duration: 0.4, ease: 'easeInOut' }}
+        >
           <InterviewChat />
+        </motion.div>
+      )}
+      {phase === 'complete' && (
+        <motion.div
+          key="complete"
+          variants={phaseVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ duration: 0.4, ease: 'easeInOut' }}
+        >
+          <InterviewSummary onRestart={() => useInterviewStore.getState().resetInterview()} />
         </motion.div>
       )}
     </AnimatePresence>

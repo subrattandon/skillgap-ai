@@ -20,6 +20,7 @@ export interface CandidateProfile {
   skills: string;
   previousScore: string;
   practiceMode?: boolean;
+  questionTypes?: QuestionType[];
 }
 
 export interface InterviewStats {
@@ -48,6 +49,7 @@ export interface InterviewHistoryEntry {
   questionCount: number;
   duration: string;
   skills: string;
+  messages?: Array<{ role: string; content: string; questionType?: string; difficulty?: string; timestamp: string }>;
 }
 
 export interface QuestionScore {
@@ -72,6 +74,9 @@ interface InterviewState {
   bookmarkedQuestions: string[];
   practiceMode: boolean;
   questionScores: Record<string, QuestionScore>;
+  isPaused: boolean;
+  selectedQuestionTypes: QuestionType[];
+  expandedHistoryIds: string[];
 
   setProfile: (profile: CandidateProfile) => void;
   startInterview: () => void;
@@ -90,6 +95,11 @@ interface InterviewState {
   toggleBookmark: (id: string) => void;
   setPracticeMode: (enabled: boolean) => void;
   setQuestionScore: (messageId: string, score: QuestionScore) => void;
+  setIsPaused: (paused: boolean) => void;
+  togglePause: () => void;
+  setSelectedQuestionTypes: (types: QuestionType[]) => void;
+  toggleQuestionType: (type: QuestionType) => void;
+  toggleExpandedHistory: (id: string) => void;
 }
 
 const HISTORY_KEY = 'ai-interviewer-history';
@@ -138,10 +148,13 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   bookmarkedQuestions: [],
   practiceMode: false,
   questionScores: {},
+  isPaused: false,
+  selectedQuestionTypes: [],
+  expandedHistoryIds: [],
 
   setProfile: (profile) => set({ profile }),
 
-  startInterview: () => set({ phase: 'interview', interviewStartTime: new Date(), sessionId: crypto.randomUUID(), questionStartTime: new Date() }),
+  startInterview: () => set({ phase: 'interview', interviewStartTime: new Date(), sessionId: crypto.randomUUID(), questionStartTime: new Date(), isPaused: false }),
 
   addMessage: (message) =>
     set((state) => ({ messages: [...state.messages, message] })),
@@ -190,9 +203,12 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       bookmarkedQuestions: [],
       practiceMode: false,
       questionScores: {},
+      isPaused: false,
+      selectedQuestionTypes: [],
+      expandedHistoryIds: [],
     }),
 
-  completeInterview: () => set({ phase: 'complete' }),
+  completeInterview: () => set({ phase: 'complete', isPaused: false }),
 
   setFeedback: (feedback) => set({ feedback }),
 
@@ -213,7 +229,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   },
 
   clearHistory: () => {
-    set({ history: [] });
+    set({ history: [], expandedHistoryIds: [] });
     if (typeof window !== 'undefined') {
       localStorage.removeItem(HISTORY_KEY);
     }
@@ -232,4 +248,27 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     set((state) => ({
       questionScores: { ...state.questionScores, [messageId]: score },
     })),
+
+  setIsPaused: (paused) => set({ isPaused: paused }),
+
+  togglePause: () => set((state) => ({ isPaused: !state.isPaused })),
+
+  setSelectedQuestionTypes: (types) => set({ selectedQuestionTypes: types }),
+
+  toggleQuestionType: (type) =>
+    set((state) => {
+      const current = state.selectedQuestionTypes;
+      if (current.includes(type)) {
+        return { selectedQuestionTypes: current.filter((t) => t !== type) };
+      }
+      return { selectedQuestionTypes: [...current, type] };
+    }),
+
+  toggleExpandedHistory: (id) =>
+    set((state) => {
+      if (state.expandedHistoryIds.includes(id)) {
+        return { expandedHistoryIds: state.expandedHistoryIds.filter((eid) => eid !== id) };
+      }
+      return { expandedHistoryIds: [...state.expandedHistoryIds, id] };
+    }),
 }));

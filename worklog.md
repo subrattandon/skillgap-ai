@@ -263,3 +263,62 @@ Priority Recommendations for Next Phase:
 - Add question difficulty curve visualization on summary
 - Add comparison with past interview sessions
 - Consider adding more question sub-types (debugging, code review, estimation)
+
+---
+Task ID: 7
+Agent: Full-Stack Developer (Phase 7 - Major Styling Improvements + New Features)
+Task: Implement 8 styling improvements and 5 new features for AI Technical Interviewer
+
+Work Log:
+- Read worklog.md and all existing code files to understand project state
+- Initialized fullstack dev environment
+- Updated interview-store.ts with new state:
+  - isPaused: boolean (pause/resume interview)
+  - selectedQuestionTypes: QuestionType[] (question type filter)
+  - expandedHistoryIds: string[] (expand/collapse history entries)
+  - New methods: setIsPaused, togglePause, setSelectedQuestionTypes, toggleQuestionType, toggleExpandedHistory
+  - CandidateProfile now includes optional questionTypes field
+  - InterviewHistoryEntry now includes optional messages array for transcript storage
+  - resetInterview clears all new state fields
+- Updated api/interview/route.ts with questionTypes filter support:
+  - Added buildTypeFocusInstruction() function that converts selected question types into context instruction
+  - Start, next, and skip actions now pass questionTypes to AI context
+  - When question types are selected, AI prioritizes those types
+- Updated globals.css with new CSS animations:
+  - @keyframes pulse-glow (emerald, amber, rose variants) for score donut glow effect
+  - .score-glow-emerald/.score-glow-amber/.score-glow-rose classes
+  - @keyframes brain-pulse-glow for empty chat state brain icon
+  - .brain-pulse-glow class
+  - @keyframes ripple for button ripple effect
+  - .btn-ripple class with ::after pseudo-element
+  - Updated print styles to hide new animation elements
+- Updated page.tsx with all 8 styling improvements:
+  1. Phase Transition Animations: AnimatePresence mode="wait" with phaseVariants (enter: opacity 0 + x:50, center: opacity 1 + x:0, exit: opacity 0 + x:-50), all 3 phases (setup/interview/complete) wrapped in motion.div with key-based transitions
+  2. Difficulty Curve Chart on Summary: DifficultyCurveChart SVG component with gradient fill below polyline, Y-axis labels (Easy/Med/Hard), X-axis labels (Q1-Qn), data points with animated circles, Easy=1/Medium=2/Hard=3 mapping
+  3. Enhanced Empty Chat State: EmptyChatState component with animated Brain icon (brain-pulse-glow), "Your interview will begin shortly" text, 3 skeleton-shimmer lines
+  4. Interview Chat "Thinking" Enhancement: TypingIndicator now shows Brain avatar + 3 bouncing dots + "Analyzing your response..." text
+  5. Social Proof / Trust Section: SocialProofSection with 3 hardcoded testimonials (Google SDE, Frontend Dev, Full Stack), Quote icon, text, and role badge, hover lift effects
+  6. Score Animation on Summary: ScoreDonut now has counting-up animation from 0 to actual score (30-step interval), plus pulsing glow effect (score-glow-emerald/amber/rose classes based on score)
+  7. Message Timestamps Enhancement: useRelativeTime hook computes "just now", "Xs ago", "Xm ago", "Xh ago", updates every 10 seconds; MessageBubbleWithTime wrapper component adds relative time next to timestamp
+  8. Hover Micro-Interactions: scale-[1.02] on selected role/level cards, hover:scale-110 on buttons/icons, hover:scale-105 on feature pills/quick start/buttons, hover:shadow-sm on action buttons, btn-ripple class on Send/Start buttons, hover:-translate-y-0.5 on summary stat cards
+- Updated page.tsx with all 5 new features:
+  1. TTS Question Reading: useTTS hook using window.speechSynthesis, TTSButton component on each interviewer message (group-hover visible), toggles between Volume2 (playing) and VolumeX (stopped) icons, speech rate 0.95, client-side only
+  2. Pause/Resume Interview: togglePause in Zustand store, Pause/Play button in header and mobile bar, isPaused state stops elapsed timer, input area shows "Interview Paused" overlay with blur, "Paused" badge in header with amber styling, Ctrl+P keyboard shortcut, all action buttons (Send/Skip/Hint) disabled when paused
+  3. Question Type Filter: Toggleable chips for DSA, System Design, HR/Behavioral on setup page with check icons when selected, selectedQuestionTypes passed to API via buildTypeFocusInstruction(), profile includes questionTypes field
+  4. Enhanced Interview History: Shows 10 sessions (up from 5), expand/collapse per entry with ChevronDown toggle, expanded view shows skills and score bar visualization, "View Details" button opens Dialog modal with full session transcript, colored score bars (emerald/amber/rose based on score), messages array saved to history entries for transcript retrieval
+  5. Session Comparison on Summary: SessionComparison component shows current score vs average past score, up/down arrow with delta, emerald for improvement/rose for decline, only appears when history has past scored sessions
+- Added new lucide-react icons: Volume2, VolumeX, Pause, Play, Quote, ChevronDown, Eye, ArrowUp, ArrowDown
+- Imported Dialog component from shadcn/ui for history transcript modal
+- Updated keyboard shortcuts overlay to include Ctrl+P for pause/resume
+- Fixed lint error: useElapsedTime hook setState in effect → removed synchronous setElapsed call and used interval-based updates only
+- All lint checks pass (zero errors/warnings)
+- Dev server compiles and serves correctly on port 3000
+
+Stage Summary:
+- All 8 styling improvements implemented: phase transitions, difficulty curve chart, enhanced empty state, thinking enhancement, social proof section, score counting animation + glow, relative timestamps, hover micro-interactions
+- All 5 new features implemented: TTS question reading, pause/resume interview, question type filter, enhanced interview history, session comparison
+- Zustand store expanded with isPaused, selectedQuestionTypes, expandedHistoryIds
+- API updated with questionTypes filter for start/next/skip actions
+- Custom CSS animations added: pulse-glow variants, brain-pulse-glow, btn-ripple
+- Zero lint errors, no compilation errors
+- Key files modified: page.tsx, interview-store.ts, globals.css, api/interview/route.ts
