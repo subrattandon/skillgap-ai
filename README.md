@@ -1,20 +1,20 @@
 <div align="center">
 
-# 🎯 AI Technical Interviewer
+# 🔥 SkillGap AI
 
-**Practice Smarter, Not Harder — AI-Powered Mock Interviews for Tech Roles**
+**AI-Powered Technical Interview Simulator & Skill Gap Analyzer**
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![shadcn/ui](https://img.shields.io/badge/shadcn%2Fui-Latest-000000?style=for-the-badge&logo=shadcnui&logoColor=white)](https://ui.shadcn.com/)
-[![Framer Motion](https://img.shields.io/badge/Framer_Motion-Latest-FF0066?style=for-the-badge&logo=framer&logoColor=white)](https://www.framer.com/motion/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](./LICENSE)
-[![Deploy](https://img.shields.io/badge/Vercel-Live-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://my-project-nine-virid-24.vercel.app)
 
 <br />
 
-[🚀 Live Demo](https://my-project-nine-virid-24.vercel.app) · [✨ Features](#-features) · [🛠 Tech Stack](#-tech-stack) · [📸 Screenshots](#-screenshots) · [📐 Architecture](#-architecture) · [🤝 Contributing](#-contributing)
+[🚀 Live Demo](https://my-project-nine-virid-24.vercel.app) · [✨ Features](#-features) · [📁 Project Structure](#-project-structure) · [🛠 Tech Stack](#-tech-stack) · [🚀 Getting Started](#-getting-started) · [📐 Architecture](#-architecture) · [🤝 Contributing](#-contributing)
 
 </div>
 
@@ -22,11 +22,63 @@
 
 ## 📖 Overview
 
-**AI Technical Interviewer** is a full-stack web application that simulates real technical interviews using AI. It generates adaptive, role-specific questions across DSA, System Design, and HR/Behavioral domains — adjusting difficulty in real-time based on your responses. Get detailed AI-powered feedback, per-question scoring, and track your progress over time.
+**SkillGap AI** is a full-stack monorepo application that simulates real technical interviews using AI and identifies skill gaps. It generates adaptive, role-specific questions across DSA, System Design, and HR/Behavioral domains — adjusting difficulty in real-time based on your responses. Get detailed AI-powered feedback, per-question scoring, and track your progress over time.
 
 > 🟢 **Try it live**: [https://my-project-nine-virid-24.vercel.app](https://my-project-nine-virid-24.vercel.app)
 
-> 💡 Whether you're a beginner preparing for your first SDE interview or a senior engineer brushing up on system design — this app adapts to **your** level and helps you improve.
+> 💡 Whether you're a beginner preparing for your first SDE interview or a senior engineer brushing up on system design — this app adapts to **your** level and helps you identify and close skill gaps.
+
+---
+
+## 📁 Project Structure
+
+```
+skillgap-ai/
+│
+├── frontend/              # Next.js 16 (App Router)
+│   ├── src/
+│   │   ├── app/           # Pages & API routes
+│   │   ├── components/    # UI components (shadcn/ui)
+│   │   ├── hooks/         # Custom React hooks
+│   │   └── lib/           # Utilities & Zustand store
+│   ├── public/            # Static assets
+│   ├── prisma/            # Database schema
+│   └── package.json
+│
+├── backend/               # FastAPI (Python)
+│   ├── app/
+│   │   ├── main.py        # FastAPI app entry point
+│   │   ├── config.py      # Pydantic settings
+│   │   ├── api/           # API route handlers
+│   │   ├── services/      # Business logic & LLM service
+│   │   ├── models/        # Pydantic request/response models
+│   │   └── db/            # SQLAlchemy database setup
+│   └── requirements.txt
+│
+├── ai-engine/             # LLM + prompts (standalone module)
+│   ├── prompts/
+│   │   ├── evaluation.txt # Answer evaluation prompt
+│   │   ├── question.txt   # Question generation prompt
+│   │   ├── feedback.txt   # Overall feedback prompt
+│   │   └── hint.txt       # Hint generation prompt
+│   ├── llm_service.py     # Python LLM service
+│   └── README.md
+│
+├── database/
+│   ├── schema.sql         # PostgreSQL schema (Supabase-ready)
+│   └── supabase.md        # Supabase setup guide
+│
+├── docs/
+│   ├── architecture.md    # System architecture with diagrams
+│   └── flow.md            # Interview flow documentation
+│
+├── scripts/
+│   └── seed_data.py       # Database seeding script
+│
+├── .env.example           # Environment variable template
+├── docker-compose.yml     # Docker orchestration
+└── README.md
+```
 
 ---
 
@@ -35,8 +87,8 @@
 ### 🧠 AI-Powered Interview Engine
 - **Adaptive Difficulty** — Questions get harder or easier based on your answer quality
 - **Multiple Question Types** — DSA, System Design, and HR/Behavioral
-- **6 Tech Roles** — SDE, Frontend, Backend, Full Stack, DevOps, Data Analyst, ML Engineer
-- **3 Experience Levels** — Beginner (0-2 yrs), Intermediate (2-5 yrs), Senior (5+ yrs)
+- **7 Tech Roles** — SDE, Frontend, Backend, Full Stack, DevOps, Data Analyst, ML Engineer
+- **3 Experience Levels** — Beginner, Intermediate, Senior
 - **Question Type Filter** — Focus on specific categories you want to practice
 
 ### 💬 Interactive Interview Chat
@@ -87,68 +139,19 @@
 
 ## 🛠 Tech Stack
 
-| Category | Technology |
-|----------|-----------|
-| **Framework** | [Next.js 16](https://nextjs.org/) (App Router) |
-| **Language** | [TypeScript 5](https://www.typescriptlang.org/) |
-| **Styling** | [Tailwind CSS 4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) |
-| **Animations** | [Framer Motion](https://www.framer.com/motion/) |
-| **State Management** | [Zustand](https://zustand.docs.pmnd.rs/) |
-| **AI Engine** | [z-ai-web-dev-sdk](https://www.npmjs.com/package/z-ai-web-dev-sdk) (LLM) |
-| **Database** | [Prisma](https://www.prisma.io/) (SQLite) |
-| **Icons** | [Lucide React](https://lucide.dev/) |
-| **Theming** | [next-themes](https://github.com/pacocoursey/next-themes) |
-
----
-
-## 📸 Screenshots
-
-### 🏠 Profile Setup
-> Select your role, experience level, skills, question types, and enable practice mode with quick-start presets.
-
-### 💬 Interview Chat
-> AI asks adaptive questions with live stats sidebar, per-question timer, bookmarking, voice input, and TTS.
-
-### 📈 Performance Summary
-> Detailed AI feedback with score donut, radar chart, difficulty curve, per-question scores, bookmarked questions, and session comparison.
-
-### 🌙 Dark Mode
-> Full dark mode support with teal/emerald theme across all pages.
-
----
-
-## 📐 Architecture
-
-```
-src/
-├── app/
-│   ├── api/
-│   │   └── interview/
-│   │       └── route.ts          # Backend API (LLM integration)
-│   ├── globals.css               # Global styles, animations, print CSS
-│   ├── layout.tsx                # Root layout with ThemeProvider
-│   └── page.tsx                  # Main application (3-phase UI)
-├── components/
-│   └── ui/                       # shadcn/ui component library
-├── hooks/
-│   ├── use-mobile.ts             # Mobile detection hook
-│   └── use-toast.ts              # Toast notification hook
-└── lib/
-    ├── interview-store.ts        # Zustand state management
-    ├── db.ts                     # Prisma database client
-    └── utils.ts                  # Utility functions
-```
-
-### API Endpoints
-
-| Action | Method | Description |
-|--------|--------|-------------|
-| `start` | `POST /api/interview` | Generate first question based on profile |
-| `next` | `POST /api/interview` | Generate follow-up question based on answer |
-| `skip` | `POST /api/interview` | Skip current question, get easier/different one |
-| `hint` | `POST /api/interview` | Get AI hint for current question (practice mode) |
-| `evaluate` | `POST /api/interview` | Score a specific answer (1-5 stars + feedback) |
-| `feedback` | `POST /api/interview` | Generate comprehensive interview feedback |
+| Category | Frontend | Backend |
+|----------|----------|---------|
+| **Framework** | [Next.js 16](https://nextjs.org/) (App Router) | [FastAPI](https://fastapi.tiangolo.com/) |
+| **Language** | [TypeScript 5](https://www.typescriptlang.org/) | [Python 3.11+](https://python.org/) |
+| **Styling** | [Tailwind CSS 4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) | — |
+| **Animations** | [Framer Motion](https://www.framer.com/motion/) | — |
+| **State** | [Zustand](https://zustand.docs.pmnd.rs/) | — |
+| **AI Engine** | [z-ai-web-dev-sdk](https://www.npmjs.com/package/z-ai-web-dev-sdk) | httpx (direct gateway calls) |
+| **Database** | [Prisma](https://www.prisma.io/) (SQLite) | [SQLAlchemy](https://www.sqlalchemy.org/) |
+| **Icons** | [Lucide React](https://lucide.dev/) | — |
+| **Theming** | [next-themes](https://github.com/pacocoursey/next-themes) | — |
+| **Validation** | [Zod](https://zod.dev/) | [Pydantic](https://docs.pydantic.dev/) |
+| **Deployment** | [Vercel](https://vercel.com/) | Docker / any Python host |
 
 ---
 
@@ -157,21 +160,22 @@ src/
 ### Prerequisites
 
 - **Node.js** 18+ or **Bun** runtime
-- An LLM API key (configured via `z-ai-web-dev-sdk`)
+- **Python** 3.11+ (for backend)
+- **Docker** (optional, for containerized setup)
 
-### Installation
+### Quick Start (Frontend Only)
 
 ```bash
 # Clone the repository
-git clone https://github.com/subrattandon/Ai-technical-interviewer.git
-cd Ai-technical-interviewer
+git clone https://github.com/subrattandon/skillgap-ai.git
+cd skillgap-ai
 
 # Install dependencies
 bun install
 
 # Set up environment variables
-cp .env.example .env
-# Edit .env with your configuration
+cp .env.example frontend/.env
+# Edit frontend/.env with your configuration
 
 # Push database schema
 bun run db:push
@@ -180,29 +184,98 @@ bun run db:push
 bun run dev
 ```
 
-The app will be running at `http://localhost:3000`
+The frontend will be running at `http://localhost:3000`
 
-### 🌐 Deploy to Vercel
-
-The easiest way to deploy this Next.js app is with [Vercel](https://vercel.com):
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/subrattandon/Ai-technical-interviewer)
-
-Or via CLI:
+### Full Stack Setup (Frontend + Backend)
 
 ```bash
-npm i -g vercel
-vercel --prod
+# Terminal 1: Start frontend
+bun run dev:frontend
+
+# Terminal 2: Start backend
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Docker Setup
+
+```bash
+# Start all services
+docker compose up -d
+
+# Frontend: http://localhost:3000
+# Backend:  http://localhost:8000
+# API Docs: http://localhost:8000/docs
 ```
 
 ### Environment Variables
 
-Create a `.env` file in the root directory:
+Copy `.env.example` and fill in your configuration:
 
 ```env
-DATABASE_URL="file:./db/custom.db"
-# Add any z-ai-web-dev-sdk configuration variables here
+# Database
+DATABASE_URL=file:./db/custom.db
+
+# Z-AI Gateway (for LLM calls)
+ZAI_API_KEY=your-api-key-here
+ZAI_GATEWAY_URL=http://localhost:3000
+
+# Frontend
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Backend
+BACKEND_URL=http://localhost:8000
 ```
+
+---
+
+## 📐 Architecture
+
+### System Architecture
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│                  │     │                  │     │                  │
+│    Frontend      │────▶│    Backend       │────▶│    AI Engine     │
+│    (Next.js)     │     │    (FastAPI)     │     │    (z-ai SDK)    │
+│    Port: 3000    │     │    Port: 8000    │     │                  │
+│                  │     │                  │     │                  │
+└────────┬────────┘     └────────┬─────────┘     └──────────────────┘
+         │                       │
+         │                       │
+         ▼                       ▼
+┌─────────────────┐     ┌──────────────────┐
+│                  │     │                  │
+│    Prisma        │     │    SQLAlchemy    │
+│    (SQLite)      │     │    (SQLite/PG)   │
+│                  │     │                  │
+└─────────────────┘     └──────────────────┘
+```
+
+### API Endpoints
+
+| Action | Method | Endpoint | Description |
+|--------|--------|----------|-------------|
+| `start` | POST | `/api/interview` | Generate first question based on profile |
+| `next` | POST | `/api/interview` | Generate follow-up question based on answer |
+| `skip` | POST | `/api/interview` | Skip current question, get easier/different one |
+| `hint` | POST | `/api/interview` | Get AI hint for current question (practice mode) |
+| `evaluate` | POST | `/api/interview` | Score a specific answer (1-5 stars + feedback) |
+| `feedback` | POST | `/api/interview` | Generate comprehensive interview feedback |
+| Health | GET | `/api/health` | Backend health check |
+
+### Data Flow
+
+```
+User Input → Frontend (React) → API Route → LLM Service → z-ai Gateway → AI Response
+                                    │                              │
+                                    ▼                              ▼
+                              Prisma/SQLite              JSON Response
+```
+
+> 📊 For detailed architecture diagrams, see [docs/architecture.md](./docs/architecture.md)
+> 🔄 For interview flow diagrams, see [docs/flow.md](./docs/flow.md)
 
 ---
 
@@ -227,43 +300,19 @@ DATABASE_URL="file:./db/custom.db"
 
 ---
 
-## 🗂 Project Structure
-
-### State Management (Zustand Store)
-
-The application uses a centralized Zustand store (`interview-store.ts`) managing:
-
-- **Phase state** — `setup` → `interview` → `complete`
-- **Profile** — Role, level, skills, practice mode, question type preferences
-- **Messages** — Interview chat history with metadata
-- **Stats** — Question counts by type and difficulty
-- **Feedback** — AI-generated performance review
-- **History** — Past sessions with localStorage persistence
-- **Bookmarks** — Saved questions for review
-- **Question Scores** — Per-answer ratings with feedback
-- **Pause State** — Interview pause/resume
-
-### AI Prompt Engineering
-
-The backend uses carefully crafted system prompts for:
-- **Question Generation** — Role-aware, difficulty-adaptive question creation
-- **Follow-up Questions** — Context-aware continuation based on answer quality
-- **Hint Generation** — Suggestive hints without revealing answers
-- **Answer Evaluation** — 1-5 star scoring with brief feedback
-- **Overall Feedback** — Comprehensive performance review with strengths/improvements
-
----
-
 ## 🧩 Key Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
+| **Monorepo Structure** | Single repo for frontend, backend, and AI engine — easier coordination |
+| **FastAPI Backend** | High-performance Python API with automatic OpenAPI docs |
+| **Separate AI Engine** | Prompts isolated for easy A/B testing and iteration |
 | **Client-side Voice/TTS** | Web Speech API for zero-cost, zero-latency voice features |
 | **localStorage for History** | Simple persistence without backend auth requirement |
 | **Zustand over Context** | Better performance, simpler API, no provider nesting |
-| **z-ai-web-dev-sdk** | Unified SDK for LLM calls with built-in error handling |
 | **SVG Charts** | Lightweight, responsive charts without heavy chart libraries |
 | **window.print() for PDF** | Native browser PDF with @media print CSS — no dependencies |
+| **Supabase-ready Schema** | PostgreSQL schema with RLS policies for production deployment |
 
 ---
 
@@ -286,6 +335,9 @@ Contributions are welcome! Here's how you can help:
 - [ ] Interview templates for specific companies
 - [ ] Leaderboard and community features
 - [ ] Mobile app with React Native
+- [ ] Skill gap visualization dashboard
+- [ ] Learning resource recommendations based on weak areas
+- [ ] Multi-language support
 
 ---
 
@@ -303,6 +355,6 @@ This project is licensed under the MIT License — see the [LICENSE](./LICENSE) 
 
 ⭐ If this project helped you prepare for your interview, give it a star!
 
-[⬆ Back to Top](#-ai-technical-interviewer)
+[⬆ Back to Top](#-skillgap-ai)
 
 </div>

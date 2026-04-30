@@ -430,3 +430,99 @@ Current Project Status:
 - Code is at https://github.com/subrattandon/Ai-technical-interviewer
 - Live app at https://my-project-nine-virid-24.vercel.app
 - No outstanding bugs or critical issues
+
+---
+Task ID: 2
+Agent: Full-Stack Developer
+Task: Create FastAPI backend
+
+Work Log:
+- Read worklog.md and the existing Next.js API route (route.ts) to understand all interview actions and prompt templates
+- Analyzed z-ai-web-dev-sdk source code to understand how it calls the LLM gateway (HTTP POST to {baseUrl}/chat/completions with Authorization header)
+- Read /etc/.z-ai-config to get the gateway credentials (baseUrl, apiKey, chatId, userId, token)
+- Created complete backend directory structure at /home/z/my-project/backend/
+- Wrote requirements.txt with: fastapi, uvicorn, pydantic, pydantic-settings, httpx, sqlalchemy, python-dotenv
+- Wrote .gitignore for Python project
+- Wrote app/config.py with pydantic-settings that reads the same .z-ai-config as the Node.js SDK
+- Wrote app/models/profile.py with CandidateProfile (role, level, skills, previousScore, practiceMode, questionTypes)
+- Wrote app/models/interview.py with InterviewRequest (action-based), InterviewMessage, and all response models (QuestionResponse, HintResponse, EvaluateResponse, FeedbackResponse)
+- Wrote app/services/llm_service.py with:
+  - All 5 prompt templates (SYSTEM_PROMPT, FOLLOWUP_PROMPT, FEEDBACK_PROMPT, HINT_PROMPT, EVALUATE_PROMPT) - identical to Next.js route.ts
+  - All response parsers (parse_json_response, parse_hint_response, parse_evaluate_response, parse_feedback_response) with fallback handling
+  - normalize_type() and normalize_difficulty() helper functions
+  - LLMService class that calls z-ai gateway directly over HTTP using httpx
+  - Singleton llm_service instance with proper lifecycle management
+- Wrote app/services/interview_service.py with:
+  - build_type_focus_instruction() for question type filtering
+  - _format_messages() for conversation transcript formatting
+  - _profile_context() for candidate profile section
+  - handle_start(), handle_next(), handle_skip(), handle_hint(), handle_evaluate(), handle_feedback() - all 6 action handlers
+  - Proper error handling with fallback responses for each handler
+- Wrote app/api/health.py with GET /api/health endpoint
+- Wrote app/api/interview.py with POST /api/interview endpoint handling all 6 actions
+- Wrote app/db/database.py with SQLAlchemy engine, SessionLocal, Base, get_db dependency, init_db()
+- Wrote app/main.py with FastAPI app, CORS middleware (allow all origins), lifespan handler, router includes
+- Fixed .env conflict: root project .env has DATABASE_URL for Prisma which clashes with SQLAlchemy; created backend-specific .env with BACKEND_DATABASE_URL and pointed config to it
+- Fixed Pydantic union type issue: originally used Union[CandidateProfile, CandidateProfileBrief] but Pydantic v2 chose Brief; simplified to single CandidateProfile with optional fields
+- Installed Python dependencies into the venv
+- Tested all 6 actions end-to-end via inline uvicorn + urllib:
+  - start: Returns question with type and difficulty ✓
+  - next: Returns next question based on conversation ✓
+  - skip: Returns easier/different question ✓
+  - hint: Returns hint for current question ✓
+  - evaluate: Returns score (1-5) and feedback ✓
+  - feedback: Returns overallScore, strengths, improvements, summary ✓
+- Tested error handling: missing profile returns 400, missing role/level returns 400 ✓
+- Verified OpenAPI docs available at /docs and /openapi.json ✓
+
+Stage Summary:
+- Complete FastAPI backend at /home/z/my-project/backend/ with 15 files
+- All 6 interview actions working: start, next, skip, hint, evaluate, feedback
+- LLM service calls z-ai gateway directly (same as Node.js SDK, no proxy needed)
+- Same prompt templates and response parsers as Next.js route.ts
+- CORS enabled for all origins (dev mode)
+- SQLAlchemy + SQLite database configured (ready for ORM models)
+- Health check endpoint at GET /api/health
+- Auto-generated OpenAPI/Swagger docs at /docs
+- Runs on port 8000 with: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+---
+Task ID: 3-7
+Agent: general-purpose
+Task: Create ai-engine, database, docs, scripts, and root config files
+
+Work Log:
+- Read worklog.md and existing codebase (route.ts, backend llm_service.py, config.py) to understand project context
+- Extracted 5 prompt templates from frontend/src/app/api/interview/route.ts into separate .txt files
+- Created ai-engine/ directory with:
+  - prompts/question.txt — System prompt for question generation
+  - prompts/evaluation.txt — System prompt for answer evaluation
+  - prompts/feedback.txt — System prompt for overall interview feedback
+  - prompts/hint.txt — System prompt for hint generation
+  - llm_service.py — Python LLM service with clean API (generate_question, generate_next_question, generate_skip_question, evaluate_answer, generate_feedback, generate_hint)
+  - README.md — Module documentation with usage examples and API reference
+- Created database/ directory with:
+  - schema.sql — Full PostgreSQL schema with 5 tables (users, interviews, questions, answers, bookmarks), indexes, RLS policies, and useful views (interview_summaries, question_bank)
+  - supabase.md — Step-by-step Supabase setup guide including RLS policies, connection string, verification steps, and useful SQL commands
+- Created docs/ directory with:
+  - architecture.md — Full architecture document with Mermaid component diagrams, system architecture, API reference, data flow, design decisions, and deployment info
+  - flow.md — Interview flow document with Mermaid sequence diagrams, state transitions, question type distribution, adaptive difficulty flow, and keyboard shortcuts
+- Created scripts/ directory with:
+  - seed_data.py — Standalone script that seeds the database with 3 users, 5 interviews, 21 questions, 21 answers, and 4 bookmarks
+  - Includes --clear flag, --db-url override, DATABASE_URL normalization (Prisma file: → sqlite:///), and automatic schema creation
+  - Tested successfully: all 5 tables populated correctly
+- Created root-level config files:
+  - .env.example — Template with DATABASE_URL, ZAI_API_KEY, ZAI_GATEWAY_URL, NEXT_PUBLIC_APP_URL, BACKEND_URL
+  - docker-compose.yml — Docker Compose with frontend (Next.js:3000) and backend (FastAPI:8000) services, health checks, and volume persistence
+- Fixed seed_data.py issues:
+  - Added _normalize_db_url() to handle Prisma-style file: URLs
+  - Added ensure_schema() to auto-create tables if they don't exist
+  - Split CREATE TABLE statements for SQLite compatibility (single-statement-at-a-time)
+
+Stage Summary:
+- ai-engine/ module: 4 prompt files + llm_service.py + README.md — standalone Python LLM service with file-based prompts
+- database/ module: schema.sql (PostgreSQL with indexes, RLS, views) + supabase.md (setup guide)
+- docs/ module: architecture.md (system architecture, Mermaid diagrams, API reference) + flow.md (interview flow, sequence diagrams)
+- scripts/ module: seed_data.py (3 users, 5 interviews, 21 Q&As, 4 bookmarks; tested successfully)
+- Root configs: .env.example + docker-compose.yml (frontend + backend services)
+- Seed script verified: all tables populated correctly with sample data

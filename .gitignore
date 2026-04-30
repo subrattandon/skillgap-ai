@@ -14,7 +14,7 @@ node_modules
 /coverage
 
 # next.js
-/.next/
+.next/
 /out/
 
 # production
@@ -30,12 +30,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files
+.env
+.env.local
+.env.*.local
 
 # vercel
 .vercel
-
 
 # typescript
 *.tsbuildinfo
@@ -43,12 +44,40 @@ next-env.d.ts
 local-*
 .claude
 .z-ai-config
+
+# logs
 *.log
 dev.log
 dev.out.log
-test
-prompt
-
 server.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Database
+*.db
+*.db-journal
+
+# Upload/download directories
+/upload/
+/download/
+
 # Skills directory
 /skills/
+
+# Agent context
+/agent-ctx/
+
+# Examples
+/examples/
+
+# Infrastructure
+/.zscripts/
+/Caddyfile

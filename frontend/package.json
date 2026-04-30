@@ -1,18 +1,16 @@
 {
-  "name": "skillgap-ai",
-  "version": "1.0.0",
+  "name": "frontend",
+  "version": "0.2.0",
   "private": true,
-  "description": "AI-Powered Technical Interview Simulator & Skill Gap Analyzer",
   "scripts": {
-    "dev": "cd frontend && next dev -p 3000 2>&1 | tee dev.log",
-    "dev:frontend": "cd frontend && next dev -p 3000 2>&1 | tee dev.log",
-    "dev:backend": "cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
-    "build": "cd frontend && next build",
-    "lint": "cd frontend && eslint src/",
-    "db:push": "cd frontend && prisma db push",
-    "db:generate": "cd frontend && prisma generate",
-    "db:migrate": "cd frontend && prisma migrate dev",
-    "db:reset": "cd frontend && prisma migrate reset"
+    "dev": "next dev -p 3000 2>&1 | tee ../dev.log",
+    "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee ../server.log",
+    "lint": "eslint .",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:reset": "prisma migrate reset"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -84,7 +82,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "bun-types": "^1.3.4",
