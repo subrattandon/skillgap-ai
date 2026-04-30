@@ -21,9 +21,15 @@ import {
   GraduationCap,
   Star,
   PanelLeftOpen,
-  X,
   Clock,
   MessageCircle,
+  SkipForward,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  TrendingUp,
+  Lightbulb,
+  Timer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,6 +38,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -46,6 +53,17 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import {
   useInterviewStore,
   type CandidateProfile,
@@ -70,6 +88,31 @@ function useAutoResizeTextarea(value: string, maxHeight: number = 160) {
   }, [value, maxHeight]);
 
   return ref;
+}
+
+// ─── Elapsed Timer Hook ─────────────────────────────────────────
+function useElapsedTime(startTime: Date | null) {
+  const [elapsed, setElapsed] = useState(() => startTime ? computeElapsed(startTime) : '00:00');
+
+  useEffect(() => {
+    if (!startTime) return;
+
+    const update = () => {
+      setElapsed(computeElapsed(startTime));
+    };
+
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  return elapsed;
+}
+
+function computeElapsed(startTime: Date): string {
+  const diff = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
+  const mins = Math.floor(diff / 60);
+  const secs = diff % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 // ─── Profile Setup Component ─────────────────────────────────────
@@ -152,6 +195,7 @@ function ProfileSetup() {
             { icon: <Target className="h-3 w-3" />, text: 'Adaptive Difficulty' },
             { icon: <Code2 className="h-3 w-3" />, text: 'DSA & System Design' },
             { icon: <Users className="h-3 w-3" />, text: 'HR Questions' },
+            { icon: <TrendingUp className="h-3 w-3" />, text: 'AI Feedback' },
           ].map((f) => (
             <Badge key={f.text} variant="secondary" className="gap-1.5 py-1.5 px-3 text-xs">
               {f.icon}
@@ -446,22 +490,58 @@ function StatsPanel({ compact = false }: { compact?: boolean }) {
 
       {/* End Interview Button */}
       {phase === 'interview' && stats.totalQuestions >= 1 && (
-        <Button
-          variant="outline"
-          className="w-full gap-2 hover:bg-rose-500/10 hover:text-rose-600 hover:border-rose-500/30 transition-colors"
-          onClick={completeInterview}
-        >
-          <Trophy className="h-4 w-4" />
-          End Interview
-        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full gap-2 hover:bg-rose-500/10 hover:text-rose-600 hover:border-rose-500/30 transition-colors"
+            >
+              <Trophy className="h-4 w-4" />
+              End Interview
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                End Interview?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to end the interview? You&apos;ve answered {stats.totalQuestions} question{stats.totalQuestions !== 1 ? 's' : ''} so far. You&apos;ll receive AI feedback on your performance.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Continue Interview</AlertDialogCancel>
+              <AlertDialogAction onClick={completeInterview} className="bg-rose-600 hover:bg-rose-700">
+                End Interview
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   );
 }
 
 // ─── Message Bubble ──────────────────────────────────────────────
-function MessageBubble({ message }: { message: InterviewMessage }) {
+function MessageBubble({ message, questionIndex }: { message: InterviewMessage; questionIndex?: number }) {
   const isInterviewer = message.role === 'interviewer';
+  const isSystem = message.role === 'system';
+
+  if (isSystem) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex justify-center"
+      >
+        <div className="bg-muted/60 text-muted-foreground text-xs px-4 py-2 rounded-full border">
+          {message.content}
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -486,6 +566,11 @@ function MessageBubble({ message }: { message: InterviewMessage }) {
         {/* Question metadata */}
         {isInterviewer && message.questionType && message.difficulty && (
           <div className="flex items-center gap-1.5 flex-wrap">
+            {questionIndex !== undefined && (
+              <Badge variant="secondary" className="text-[10px] gap-1 py-0.5 px-1.5">
+                Q{questionIndex}
+              </Badge>
+            )}
             <TypeBadge type={message.questionType} />
             <DifficultyBadge difficulty={message.difficulty} />
           </div>
@@ -548,13 +633,16 @@ function InterviewChat() {
     resetInterview,
     completeInterview,
     phase,
+    interviewStartTime,
   } = useInterviewStore();
   const { toast } = useToast();
   const [input, setInput] = useState('');
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [mobileStatsOpen, setMobileStatsOpen] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useAutoResizeTextarea(input);
+  const elapsed = useElapsedTime(interviewStartTime);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -563,7 +651,6 @@ function InterviewChat() {
   }, []);
 
   useEffect(() => {
-    // Small delay to ensure DOM is updated
     const timer = setTimeout(scrollToBottom, 50);
     return () => clearTimeout(timer);
   }, [messages, isLoading, scrollToBottom]);
@@ -572,6 +659,13 @@ function InterviewChat() {
   useEffect(() => {
     if (phase === 'interview' && !interviewStarted && profile) {
       setInterviewStarted(true);
+      // Add welcome message
+      addMessage({
+        id: crypto.randomUUID(),
+        role: 'system',
+        content: `Interview started for ${profile.role} (${profile.level}). Good luck!`,
+        timestamp: new Date(),
+      });
       generateFirstQuestion();
     }
   }, [phase, interviewStarted, profile]);
@@ -582,10 +676,7 @@ function InterviewChat() {
       const res = await fetch('/api/interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'start',
-          profile,
-        }),
+        body: JSON.stringify({ action: 'start', profile }),
       });
 
       const data = await res.json();
@@ -602,18 +693,10 @@ function InterviewChat() {
         updateCurrentQuestion(data.type, data.difficulty);
         incrementStats(data.type, data.difficulty);
       } else {
-        toast({
-          title: 'Error',
-          description: data.error || 'Failed to generate question',
-          variant: 'destructive',
-        });
+        toast({ title: 'Error', description: data.error || 'Failed to generate question', variant: 'destructive' });
       }
     } catch {
-      toast({
-        title: 'Connection Error',
-        description: 'Failed to connect to the interview server',
-        variant: 'destructive',
-      });
+      toast({ title: 'Connection Error', description: 'Failed to connect to the interview server', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -663,18 +746,59 @@ function InterviewChat() {
         updateCurrentQuestion(data.type, data.difficulty);
         incrementStats(data.type, data.difficulty);
       } else {
-        toast({
-          title: 'Error',
-          description: data.error || 'Failed to generate question',
-          variant: 'destructive',
-        });
+        toast({ title: 'Error', description: data.error || 'Failed to generate question', variant: 'destructive' });
       }
     } catch {
-      toast({
-        title: 'Connection Error',
-        description: 'Failed to connect to the interview server',
-        variant: 'destructive',
+      toast({ title: 'Connection Error', description: 'Failed to connect to the interview server', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+      textareaRef.current?.focus();
+    }
+  };
+
+  const handleSkip = async () => {
+    if (isLoading) return;
+
+    addMessage({
+      id: crypto.randomUUID(),
+      role: 'system',
+      content: 'Question skipped',
+      timestamp: new Date(),
+    });
+
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/interview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'skip',
+          profile,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            questionType: m.questionType,
+            difficulty: m.difficulty,
+          })),
+        }),
       });
+
+      const data = await res.json();
+      if (data.success) {
+        const msg: InterviewMessage = {
+          id: crypto.randomUUID(),
+          role: 'interviewer',
+          content: data.question,
+          questionType: data.type,
+          difficulty: data.difficulty,
+          timestamp: new Date(),
+        };
+        addMessage(msg);
+        updateCurrentQuestion(data.type, data.difficulty);
+        incrementStats(data.type, data.difficulty);
+      }
+    } catch {
+      toast({ title: 'Connection Error', description: 'Failed to generate question', variant: 'destructive' });
     } finally {
       setIsLoading(false);
       textareaRef.current?.focus();
@@ -696,6 +820,16 @@ function InterviewChat() {
   if (phase === 'complete') {
     return <InterviewSummary onRestart={handleReset} />;
   }
+
+  // Count question index for display
+  let qIndex = 0;
+  const getQuestionIndex = (msg: InterviewMessage) => {
+    if (msg.role === 'interviewer' && msg.questionType) {
+      qIndex++;
+      return qIndex;
+    }
+    return undefined;
+  };
 
   return (
     <div className="h-screen flex bg-background">
@@ -723,7 +857,7 @@ function InterviewChat() {
         {/* Top Bar */}
         <header className="h-14 border-b flex items-center justify-between px-3 sm:px-4 flex-shrink-0 bg-background/80 backdrop-blur-sm">
           <div className="flex items-center gap-2 sm:gap-3">
-            <Button variant="ghost" size="icon" onClick={handleReset} className="lg:hidden h-9 w-9">
+            <Button variant="ghost" size="icon" onClick={() => setShowResetDialog(true)} className="lg:hidden h-9 w-9">
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div className="flex items-center gap-2">
@@ -731,6 +865,10 @@ function InterviewChat() {
               <span className="text-sm font-medium hidden sm:inline">Interview in Progress</span>
               <span className="text-sm font-medium sm:hidden">Live</span>
             </div>
+            <Badge variant="outline" className="text-xs tabular-nums gap-1">
+              <Timer className="h-3 w-3" />
+              {elapsed}
+            </Badge>
             <Badge variant="outline" className="text-xs tabular-nums">
               Q{stats.totalQuestions}
             </Badge>
@@ -775,11 +913,32 @@ function InterviewChat() {
               <Trophy className="h-3.5 w-3.5" />
               End
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleReset} className="h-9 w-9">
+            <Button variant="ghost" size="icon" onClick={() => setShowResetDialog(true)} className="h-9 w-9">
               <RotateCcw className="h-4 w-4" />
             </Button>
           </div>
         </header>
+
+        {/* Reset Confirmation Dialog */}
+        <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                Reset Interview?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                This will end your current session and clear all progress. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleReset} className="bg-rose-600 hover:bg-rose-700">
+                Reset
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 scroll-smooth">
@@ -793,9 +952,17 @@ function InterviewChat() {
           )}
 
           <AnimatePresence>
-            {messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
-            ))}
+            {(() => {
+              // Reset question index for rendering
+              let qi = 0;
+              return messages.map((msg) => {
+                if (msg.role === 'interviewer' && msg.questionType) {
+                  qi++;
+                  return <MessageBubble key={msg.id} message={msg} questionIndex={qi} />;
+                }
+                return <MessageBubble key={msg.id} message={msg} />;
+              });
+            })()}
           </AnimatePresence>
 
           <AnimatePresence>
@@ -820,6 +987,16 @@ function InterviewChat() {
                 />
               </div>
               <Button
+                onClick={handleSkip}
+                disabled={isLoading || stats.totalQuestions < 1}
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 flex-shrink-0 rounded-xl"
+                title="Skip question"
+              >
+                <SkipForward className="h-4 w-4" />
+              </Button>
+              <Button
                 onClick={handleSend}
                 disabled={isLoading || !input.trim()}
                 size="icon"
@@ -828,9 +1005,15 @@ function InterviewChat() {
                 <Send className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
-              Press Enter to send • Shift+Enter for new line
-            </p>
+            <div className="flex items-center justify-between mt-1.5">
+              <p className="text-[10px] text-muted-foreground">
+                Enter to send · Shift+Enter for new line
+              </p>
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <SkipForward className="h-3 w-3" />
+                Skip question
+              </p>
+            </div>
           </div>
         </div>
       </main>
@@ -838,9 +1021,117 @@ function InterviewChat() {
   );
 }
 
+// ─── Feedback Section ────────────────────────────────────────────
+function FeedbackSection({ feedback, isLoading }: { feedback: { overallScore: number; strengths: string[]; improvements: string[]; summary: string } | null; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <Card className="border-2 border-primary/20">
+        <CardContent className="py-8">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="text-center">
+              <p className="text-sm font-medium">Generating AI Feedback...</p>
+              <p className="text-xs text-muted-foreground mt-1">Analyzing your interview performance</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!feedback) return null;
+
+  const scoreColor = feedback.overallScore >= 7 ? 'text-emerald-500' : feedback.overallScore >= 4 ? 'text-amber-500' : 'text-rose-500';
+  const scoreLabel = feedback.overallScore >= 7 ? 'Strong' : feedback.overallScore >= 4 ? 'Moderate' : 'Needs Work';
+
+  return (
+    <Card className="border-2 border-primary/20 overflow-hidden">
+      <div className="bg-primary/5 px-6 py-4 border-b">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <span className="font-semibold">AI Performance Review</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">{scoreLabel}</span>
+            <span className={`text-3xl font-bold tabular-nums ${scoreColor}`}>{feedback.overallScore}</span>
+            <span className="text-sm text-muted-foreground">/10</span>
+          </div>
+        </div>
+      </div>
+      <CardContent className="p-6 space-y-5">
+        {/* Score Bar */}
+        <div className="space-y-2">
+          <div className="h-3 rounded-full bg-muted overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${feedback.overallScore * 10}%` }}
+              transition={{ duration: 1.5, ease: 'easeOut', delay: 0.3 }}
+              className={`h-full rounded-full ${
+                feedback.overallScore >= 7 ? 'bg-emerald-500' : feedback.overallScore >= 4 ? 'bg-amber-500' : 'bg-rose-500'
+              }`}
+            />
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div className="p-3 rounded-lg bg-muted/50 border">
+          <p className="text-sm leading-relaxed">{feedback.summary}</p>
+        </div>
+
+        {/* Strengths */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="h-4 w-4" />
+            Strengths
+          </div>
+          <ul className="space-y-1.5">
+            {feedback.strengths.map((s, i) => (
+              <motion.li
+                key={i}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.5 + i * 0.1 }}
+                className="flex items-start gap-2 text-sm"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0" />
+                <span>{s}</span>
+              </motion.li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Improvements */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
+            <Lightbulb className="h-4 w-4" />
+            Areas for Improvement
+          </div>
+          <ul className="space-y-1.5">
+            {feedback.improvements.map((s, i) => (
+              <motion.li
+                key={i}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.8 + i * 0.1 }}
+                className="flex items-start gap-2 text-sm"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 flex-shrink-0" />
+                <span>{s}</span>
+              </motion.li>
+            ))}
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Interview Summary ───────────────────────────────────────────
 function InterviewSummary({ onRestart }: { onRestart: () => void }) {
-  const { stats, profile, messages } = useInterviewStore();
+  const { stats, profile, messages, feedback, feedbackLoading, setFeedback, setFeedbackLoading } = useInterviewStore();
+  const { toast } = useToast();
+  const [feedbackRequested, setFeedbackRequested] = useState(false);
 
   const interviewDuration = () => {
     if (messages.length < 2) return '0 min';
@@ -851,9 +1142,46 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
   };
 
   const getPerformanceNote = () => {
-    if (stats.hardCount > 0) return 'You tackled some hard questions - impressive!';
+    if (stats.hardCount > 0) return 'You tackled some hard questions — impressive!';
     if (stats.mediumCount > stats.easyCount) return 'Great progression through medium difficulty!';
-    return 'Solid foundation - keep practicing!';
+    return 'Solid foundation — keep practicing!';
+  };
+
+  // Request AI feedback on mount
+  useEffect(() => {
+    if (!feedbackRequested && profile && messages.length > 0) {
+      setFeedbackRequested(true);
+      requestFeedback();
+    }
+  }, [feedbackRequested, profile, messages]);
+
+  const requestFeedback = async () => {
+    setFeedbackLoading(true);
+    try {
+      const res = await fetch('/api/interview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'feedback',
+          profile,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            questionType: m.questionType,
+            difficulty: m.difficulty,
+          })),
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.feedback) {
+        setFeedback(data.feedback);
+      }
+    } catch {
+      // Feedback is optional, don't show error
+    } finally {
+      setFeedbackLoading(false);
+    }
   };
 
   return (
@@ -882,99 +1210,105 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
           <p className="text-muted-foreground mt-2">{getPerformanceNote()}</p>
         </div>
 
-        <Card className="border-2 shadow-xl shadow-black/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-primary" />
-              Session Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Overview Stats */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="text-center p-3 rounded-xl bg-muted/50 border">
-                <div className="text-2xl font-bold tabular-nums">{stats.totalQuestions}</div>
-                <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Questions</div>
-              </div>
-              <div className="text-center p-3 rounded-xl bg-muted/50 border">
-                <div className="text-2xl font-bold">{interviewDuration()}</div>
-                <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Duration</div>
-              </div>
-              <div className="text-center p-3 rounded-xl bg-muted/50 border">
-                <div className="text-2xl font-bold">
-                  {stats.totalQuestions > 0 ? Math.round((stats.mediumCount + stats.hardCount) / stats.totalQuestions * 100) : 0}%
+        <div className="space-y-4">
+          {/* AI Feedback */}
+          <FeedbackSection feedback={feedback} isLoading={feedbackLoading} />
+
+          {/* Session Stats */}
+          <Card className="border-2 shadow-xl shadow-black/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-primary" />
+                Session Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Overview Stats */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center p-3 rounded-xl bg-muted/50 border">
+                  <div className="text-2xl font-bold tabular-nums">{stats.totalQuestions}</div>
+                  <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Questions</div>
                 </div>
-                <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Challenge</div>
-              </div>
-            </div>
-
-            {/* Profile */}
-            {profile && (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/50 border">
-                <Briefcase className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-sm font-medium">{profile.role}</span>
-                <span className="text-muted-foreground">•</span>
-                <span className="text-sm text-muted-foreground">{profile.level}</span>
-              </div>
-            )}
-
-            {/* Type Breakdown */}
-            <div className="space-y-3">
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Question Types</div>
-              {[
-                { label: 'DSA', count: stats.dsaCount, icon: <Code2 className="h-4 w-4" />, color: 'text-violet-500' },
-                { label: 'System Design', count: stats.systemDesignCount, icon: <Server className="h-4 w-4" />, color: 'text-cyan-500' },
-                { label: 'HR/Behavioral', count: stats.hrCount, icon: <Users className="h-4 w-4" />, color: 'text-orange-500' },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center justify-between py-1">
-                  <div className="flex items-center gap-2.5 text-sm">
-                    <span className={item.color}>{item.icon}</span>
-                    <span>{item.label}</span>
-                  </div>
-                  <span className="font-semibold tabular-nums">{item.count}</span>
+                <div className="text-center p-3 rounded-xl bg-muted/50 border">
+                  <div className="text-2xl font-bold">{interviewDuration()}</div>
+                  <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Duration</div>
                 </div>
-              ))}
-            </div>
-
-            {/* Difficulty Breakdown */}
-            <div className="space-y-3">
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Difficulty Levels</div>
-              {[
-                { label: 'Easy', count: stats.easyCount, color: 'bg-emerald-500', textColor: 'text-emerald-500' },
-                { label: 'Medium', count: stats.mediumCount, color: 'bg-amber-500', textColor: 'text-amber-500' },
-                { label: 'Hard', count: stats.hardCount, color: 'bg-rose-500', textColor: 'text-rose-500' },
-              ].map((item) => (
-                <div key={item.label} className="space-y-1.5">
-                  <div className="flex justify-between text-sm">
-                    <span className={item.textColor}>{item.label}</span>
-                    <span className="font-medium tabular-nums">{item.count}</span>
+                <div className="text-center p-3 rounded-xl bg-muted/50 border">
+                  <div className="text-2xl font-bold">
+                    {stats.totalQuestions > 0 ? Math.round((stats.mediumCount + stats.hardCount) / stats.totalQuestions * 100) : 0}%
                   </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${item.color} transition-all duration-1000 ease-out`}
-                      style={{
-                        width: stats.totalQuestions
-                          ? `${(item.count / stats.totalQuestions) * 100}%`
-                          : '0%',
-                      }}
-                    />
-                  </div>
+                  <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Challenge</div>
                 </div>
-              ))}
-            </div>
+              </div>
 
-            <Separator />
+              {/* Profile */}
+              {profile && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/50 border">
+                  <Briefcase className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm font-medium">{profile.role}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-sm text-muted-foreground">{profile.level}</span>
+                </div>
+              )}
 
-            <Button
-              onClick={onRestart}
-              className="w-full h-12 text-base font-semibold gap-2 shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-transform"
-              size="lg"
-            >
-              <RotateCcw className="h-5 w-5" />
-              Start New Interview
-            </Button>
-          </CardContent>
-        </Card>
+              {/* Type Breakdown */}
+              <div className="space-y-3">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Question Types</div>
+                {[
+                  { label: 'DSA', count: stats.dsaCount, icon: <Code2 className="h-4 w-4" />, color: 'text-violet-500' },
+                  { label: 'System Design', count: stats.systemDesignCount, icon: <Server className="h-4 w-4" />, color: 'text-cyan-500' },
+                  { label: 'HR/Behavioral', count: stats.hrCount, icon: <Users className="h-4 w-4" />, color: 'text-orange-500' },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center justify-between py-1">
+                    <div className="flex items-center gap-2.5 text-sm">
+                      <span className={item.color}>{item.icon}</span>
+                      <span>{item.label}</span>
+                    </div>
+                    <span className="font-semibold tabular-nums">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Difficulty Breakdown */}
+              <div className="space-y-3">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Difficulty Levels</div>
+                {[
+                  { label: 'Easy', count: stats.easyCount, color: 'bg-emerald-500', textColor: 'text-emerald-500' },
+                  { label: 'Medium', count: stats.mediumCount, color: 'bg-amber-500', textColor: 'text-amber-500' },
+                  { label: 'Hard', count: stats.hardCount, color: 'bg-rose-500', textColor: 'text-rose-500' },
+                ].map((item) => (
+                  <div key={item.label} className="space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className={item.textColor}>{item.label}</span>
+                      <span className="font-medium tabular-nums">{item.count}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${item.color} transition-all duration-1000 ease-out`}
+                        style={{
+                          width: stats.totalQuestions
+                            ? `${(item.count / stats.totalQuestions) * 100}%`
+                            : '0%',
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Separator />
+
+              <Button
+                onClick={onRestart}
+                className="w-full h-12 text-base font-semibold gap-2 shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-transform"
+                size="lg"
+              >
+                <RotateCcw className="h-5 w-5" />
+                Start New Interview
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </motion.div>
     </div>
   );

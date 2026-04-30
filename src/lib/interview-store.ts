@@ -7,7 +7,7 @@ export type ExperienceLevel = 'Beginner' | 'Intermediate' | 'Senior';
 
 export interface InterviewMessage {
   id: string;
-  role: 'interviewer' | 'candidate';
+  role: 'interviewer' | 'candidate' | 'system';
   content: string;
   questionType?: QuestionType;
   difficulty?: Difficulty;
@@ -31,6 +31,13 @@ export interface InterviewStats {
   hardCount: number;
 }
 
+export interface InterviewFeedback {
+  overallScore: number;
+  strengths: string[];
+  improvements: string[];
+  summary: string;
+}
+
 interface InterviewState {
   phase: 'setup' | 'interview' | 'complete';
   profile: CandidateProfile | null;
@@ -39,6 +46,10 @@ interface InterviewState {
   isLoading: boolean;
   currentQuestionType: QuestionType | null;
   currentDifficulty: Difficulty | null;
+  interviewStartTime: Date | null;
+  feedback: InterviewFeedback | null;
+  feedbackLoading: boolean;
+  sessionId: string;
 
   setProfile: (profile: CandidateProfile) => void;
   startInterview: () => void;
@@ -48,6 +59,8 @@ interface InterviewState {
   incrementStats: (type: QuestionType, difficulty: Difficulty) => void;
   resetInterview: () => void;
   completeInterview: () => void;
+  setFeedback: (feedback: InterviewFeedback | null) => void;
+  setFeedbackLoading: (loading: boolean) => void;
 }
 
 export const useInterviewStore = create<InterviewState>((set) => ({
@@ -66,10 +79,14 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   isLoading: false,
   currentQuestionType: null,
   currentDifficulty: null,
+  interviewStartTime: null,
+  feedback: null,
+  feedbackLoading: false,
+  sessionId: '',
 
   setProfile: (profile) => set({ profile }),
 
-  startInterview: () => set({ phase: 'interview' }),
+  startInterview: () => set({ phase: 'interview', interviewStartTime: new Date(), sessionId: crypto.randomUUID() }),
 
   addMessage: (message) =>
     set((state) => ({ messages: [...state.messages, message] })),
@@ -110,7 +127,15 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       isLoading: false,
       currentQuestionType: null,
       currentDifficulty: null,
+      interviewStartTime: null,
+      feedback: null,
+      feedbackLoading: false,
+      sessionId: '',
     }),
 
   completeInterview: () => set({ phase: 'complete' }),
+
+  setFeedback: (feedback) => set({ feedback }),
+
+  setFeedbackLoading: (loading) => set({ feedbackLoading: loading }),
 }));
