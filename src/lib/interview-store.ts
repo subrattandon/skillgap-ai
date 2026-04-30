@@ -38,6 +38,17 @@ export interface InterviewFeedback {
   summary: string;
 }
 
+export interface InterviewHistoryEntry {
+  id: string;
+  date: string;
+  role: string;
+  level: string;
+  score: number | null;
+  questionCount: number;
+  duration: string;
+  skills: string;
+}
+
 interface InterviewState {
   phase: 'setup' | 'interview' | 'complete';
   profile: CandidateProfile | null;
@@ -50,6 +61,8 @@ interface InterviewState {
   feedback: InterviewFeedback | null;
   feedbackLoading: boolean;
   sessionId: string;
+  questionStartTime: Date | null;
+  history: InterviewHistoryEntry[];
 
   setProfile: (profile: CandidateProfile) => void;
   startInterview: () => void;
@@ -61,9 +74,34 @@ interface InterviewState {
   completeInterview: () => void;
   setFeedback: (feedback: InterviewFeedback | null) => void;
   setFeedbackLoading: (loading: boolean) => void;
+  setQuestionStartTime: (time: Date | null) => void;
+  loadHistory: () => void;
+  saveToHistory: (entry: InterviewHistoryEntry) => void;
+  clearHistory: () => void;
 }
 
-export const useInterviewStore = create<InterviewState>((set) => ({
+const HISTORY_KEY = 'ai-interviewer-history';
+
+function loadHistoryFromStorage(): InterviewHistoryEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(HISTORY_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistoryToStorage(entries: InterviewHistoryEntry[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
+  } catch {
+    // Storage full or unavailable
+  }
+}
+
+export const useInterviewStore = create<InterviewState>((set, get) => ({
   phase: 'setup',
   profile: null,
   messages: [],
@@ -83,10 +121,12 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   feedback: null,
   feedbackLoading: false,
   sessionId: '',
+  questionStartTime: null,
+  history: [],
 
   setProfile: (profile) => set({ profile }),
 
-  startInterview: () => set({ phase: 'interview', interviewStartTime: new Date(), sessionId: crypto.randomUUID() }),
+  startInterview: () => set({ phase: 'interview', interviewStartTime: new Date(), sessionId: crypto.randomUUID(), questionStartTime: new Date() }),
 
   addMessage: (message) =>
     set((state) => ({ messages: [...state.messages, message] })),
@@ -131,6 +171,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       feedback: null,
       feedbackLoading: false,
       sessionId: '',
+      questionStartTime: null,
     }),
 
   completeInterview: () => set({ phase: 'complete' }),
@@ -138,4 +179,25 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   setFeedback: (feedback) => set({ feedback }),
 
   setFeedbackLoading: (loading) => set({ feedbackLoading: loading }),
+
+  setQuestionStartTime: (time) => set({ questionStartTime: time }),
+
+  loadHistory: () => {
+    const entries = loadHistoryFromStorage();
+    set({ history: entries });
+  },
+
+  saveToHistory: (entry) => {
+    const current = get().history;
+    const updated = [entry, ...current].slice(0, 50); // Keep last 50 entries
+    set({ history: updated });
+    saveHistoryToStorage(updated);
+  },
+
+  clearHistory: () => {
+    set({ history: [] });
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(HISTORY_KEY);
+    }
+  },
 }));
