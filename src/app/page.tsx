@@ -42,6 +42,10 @@ import {
   X,
   FileJson,
   ClipboardCopy,
+  Mic,
+  MicOff,
+  Bookmark,
+  Printer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -140,6 +144,69 @@ function computeDurationMinutes(startTime: Date | null, endTime?: Date | null): 
   return diff < 1 ? '<1 min' : `${diff} min`;
 }
 
+// ─── Voice Input Hook (Web Speech API) ─────────────────────────
+function useVoiceInput(onTranscript: (text: string) => void) {
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  const startListening = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let transcript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      onTranscript(transcript);
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }, [onTranscript]);
+
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+  }, []);
+
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  }, [isListening, startListening, stopListening]);
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  return { isListening, toggleListening, startListening, stopListening };
+}
+
 // ─── Theme Toggle ─────────────────────────────────────────────────
 function ThemeToggle({ className = '' }: { className?: string }) {
   const { theme, setTheme } = useTheme();
@@ -192,7 +259,7 @@ function ThemeToggle({ className = '' }: { className?: string }) {
 // ─── Question Timer Ring ─────────────────────────────────────────
 function QuestionTimerRing({ questionIndex, startTime }: { questionIndex: number; startTime?: Date | null }) {
   const [elapsed, setElapsed] = useState(0);
-  const maxSeconds = 180; // 3 minutes
+  const maxSeconds = 180;
 
   useEffect(() => {
     if (!startTime) return;
@@ -231,6 +298,31 @@ function QuestionTimerRing({ questionIndex, startTime }: { questionIndex: number
   );
 }
 
+// ─── Progress Ring in Header ────────────────────────────────────
+function ProgressRing({ current, total, size = 28 }: { current: number; total: number; size?: number }) {
+  const maxQuestions = Math.max(total, 10);
+  const progress = Math.min(current / maxQuestions, 1);
+  const radius = (size - 6) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - progress);
+
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth="2" className="text-muted/30" />
+        <motion.circle
+          cx={size / 2} cy={size / 2} r={radius}
+          fill="none" stroke="oklch(0.55 0.15 170)" strokeWidth="2" strokeLinecap="round"
+          initial={{ strokeDasharray: circumference, strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        />
+      </svg>
+      <span className="absolute text-[8px] font-bold">{current}</span>
+    </div>
+  );
+}
+
 // ─── Code Block Renderer ─────────────────────────────────────────
 function CodeBlock({ code, language }: { code: string; language?: string }) {
   const [copied, setCopied] = useState(false);
@@ -241,18 +333,13 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Basic syntax highlighting
   const highlightCode = (text: string) => {
     const lines = text.split('\n');
     return lines.map((line, lineIdx) => {
       let highlighted = line
-        // Comments
         .replace(/(\/\/.*$|#.*$)/gm, '<span class="text-muted-foreground italic">$1</span>')
-        // Strings
         .replace(/(&quot;[^&]*&quot;|&#x27;[^&]*&#x27;|"[^"]*"|'[^']*')/g, '<span class="text-emerald-400">$1</span>')
-        // Keywords
         .replace(/\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|interface|type|enum|extends|implements|public|private|protected|static|void|null|undefined|true|false)\b/g, '<span class="text-violet-400 font-medium">$1</span>')
-        // Numbers
         .replace(/\b(\d+)\b/g, '<span class="text-amber-400">$1</span>');
       return <div key={lineIdx} className="table-row" dangerouslySetInnerHTML={{ __html: highlighted || '&nbsp;' }} />;
     });
@@ -316,6 +403,17 @@ function DotGridBackground() {
         </defs>
         <rect width="100%" height="100%" fill="url(#dotGrid)" />
       </svg>
+    </div>
+  );
+}
+
+// ─── Floating Orbs ──────────────────────────────────────────────
+function FloatingOrbs() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="animate-float1 absolute -top-20 -right-20 w-80 h-80 rounded-full bg-teal-500/10 dark:bg-teal-400/8 blur-3xl" />
+      <div className="animate-float2 absolute -bottom-20 -left-20 w-72 h-72 rounded-full bg-emerald-500/10 dark:bg-emerald-400/8 blur-3xl" />
+      <div className="animate-float3 absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-amber-500/5 dark:bg-amber-400/5 blur-3xl" />
     </div>
   );
 }
@@ -387,6 +485,110 @@ function ScoreDonut({ score, size = 140 }: { score: number; size?: number }) {
         <span className="text-xs text-muted-foreground font-medium">/10</span>
       </div>
     </div>
+  );
+}
+
+// ─── Performance Radar Chart (Pentagon) ─────────────────────────
+function PerformanceRadar({ scores }: { scores: { DSA: number; SystemDesign: number; HR: number; Communication: number; ProblemSolving: number } }) {
+  const categories = ['DSA', 'SystemDesign', 'HR', 'Communication', 'ProblemSolving'];
+  const labels = ['DSA', 'System Design', 'HR', 'Communication', 'Problem Solving'];
+  const size = 200;
+  const center = size / 2;
+  const maxRadius = 75;
+
+  const getPoint = (index: number, value: number) => {
+    const angle = (Math.PI * 2 * index) / categories.length - Math.PI / 2;
+    const r = (value / 5) * maxRadius;
+    return {
+      x: center + r * Math.cos(angle),
+      y: center + r * Math.sin(angle),
+    };
+  };
+
+  // Grid lines (pentagons at 20%, 40%, 60%, 80%, 100%)
+  const gridLevels = [1, 2, 3, 4, 5];
+  const gridPaths = gridLevels.map((level) => {
+    const points = categories.map((_, i) => {
+      const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
+      const r = (level / 5) * maxRadius;
+      return `${center + r * Math.cos(angle)},${center + r * Math.sin(angle)}`;
+    });
+    return points.join(' ');
+  });
+
+  // Data polygon
+  const dataPoints = categories.map((cat, i) => {
+    const p = getPoint(i, scores[cat as keyof typeof scores] || 0);
+    return `${p.x},${p.y}`;
+  });
+
+  // Label positions
+  const labelPositions = categories.map((_, i) => {
+    const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
+    const r = maxRadius + 20;
+    return {
+      x: center + r * Math.cos(angle),
+      y: center + r * Math.sin(angle),
+    };
+  });
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {/* Grid */}
+      {gridPaths.map((path, i) => (
+        <polygon key={i} points={path} fill="none" stroke="currentColor" strokeWidth="0.5" className="text-muted/30" />
+      ))}
+      {/* Axis lines */}
+      {categories.map((_, i) => {
+        const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
+        return (
+          <line
+            key={i}
+            x1={center} y1={center}
+            x2={center + maxRadius * Math.cos(angle)}
+            y2={center + maxRadius * Math.sin(angle)}
+            stroke="currentColor" strokeWidth="0.5" className="text-muted/20"
+          />
+        );
+      })}
+      {/* Data polygon */}
+      <motion.polygon
+        points={dataPoints.join(' ')}
+        fill="oklch(0.55 0.15 170 / 0.15)"
+        stroke="oklch(0.55 0.15 170)"
+        strokeWidth="2"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8, delay: 0.5 }}
+      />
+      {/* Data points */}
+      {categories.map((cat, i) => {
+        const p = getPoint(i, scores[cat as keyof typeof scores] || 0);
+        return (
+          <motion.circle
+            key={i}
+            cx={p.x} cy={p.y} r="3"
+            fill="oklch(0.55 0.15 170)"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.7 + i * 0.1 }}
+          />
+        );
+      })}
+      {/* Labels */}
+      {labels.map((label, i) => (
+        <text
+          key={i}
+          x={labelPositions[i].x}
+          y={labelPositions[i].y}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          className="text-[8px] fill-muted-foreground"
+        >
+          {label}
+        </text>
+      ))}
+    </svg>
   );
 }
 
@@ -564,9 +766,29 @@ function AnimatedCounter({ target, label }: { target: number; label: string }) {
   );
 }
 
+// ─── Animated Skill Tags ────────────────────────────────────────
+function SkillTags({ skills }: { skills: string }) {
+  const tags = skills.split(',').map((s) => s.trim()).filter(Boolean);
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5">
+      {tags.map((tag, i) => (
+        <motion.span
+          key={tag}
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: i * 0.05, type: 'spring', stiffness: 400, damping: 20 }}
+          className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium border border-primary/20"
+        >
+          {tag}
+        </motion.span>
+      ))}
+    </div>
+  );
+}
+
 // ─── Profile Setup Component ─────────────────────────────────────
 function ProfileSetup() {
-  const { setProfile, startInterview } = useInterviewStore();
+  const { setProfile, startInterview, practiceMode, setPracticeMode } = useInterviewStore();
   const { toast } = useToast();
   const [form, setForm] = useState({
     role: '' as Role | '',
@@ -574,6 +796,7 @@ function ProfileSetup() {
     skills: '',
     previousScore: '',
   });
+  const [skillInput, setSkillInput] = useState('');
 
   const handleSubmit = () => {
     if (!form.role || !form.level) {
@@ -585,12 +808,34 @@ function ProfileSetup() {
       return;
     }
 
-    setProfile(form as CandidateProfile);
+    setProfile({ ...form, practiceMode } as CandidateProfile);
     startInterview();
   };
 
   const handleQuickStart = (role: Role, level: ExperienceLevel) => {
     setForm((f) => ({ ...f, role, level }));
+  };
+
+  const addSkill = (skill: string) => {
+    const trimmed = skill.trim();
+    if (!trimmed) return;
+    const currentSkills = form.skills ? form.skills.split(',').map((s) => s.trim()) : [];
+    if (currentSkills.includes(trimmed)) return;
+    const newSkills = currentSkills.length > 0 ? `${form.skills}, ${trimmed}` : trimmed;
+    setForm((f) => ({ ...f, skills: newSkills }));
+    setSkillInput('');
+  };
+
+  const removeSkill = (skill: string) => {
+    const currentSkills = form.skills.split(',').map((s) => s.trim()).filter((s) => s && s !== skill);
+    setForm((f) => ({ ...f, skills: currentSkills.join(', ') }));
+  };
+
+  const handleSkillKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addSkill(skillInput);
+    }
   };
 
   const roles: { value: Role; label: string; icon: React.ReactNode; desc: string }[] = [
@@ -618,11 +863,7 @@ function ProfileSetup() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-muted/30 relative overflow-hidden">
       {/* Background effects */}
       <DotGridBackground />
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-primary/[0.02] blur-3xl" />
-      </div>
+      <FloatingOrbs />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -669,6 +910,7 @@ function ProfileSetup() {
             { icon: <Code2 className="h-3 w-3" />, text: 'DSA & System Design' },
             { icon: <Users className="h-3 w-3" />, text: 'HR Questions' },
             { icon: <TrendingUp className="h-3 w-3" />, text: 'AI Feedback' },
+            { icon: <Lightbulb className="h-3 w-3" />, text: 'Practice Mode' },
           ].map((f) => (
             <Badge key={f.text} variant="secondary" className="gap-1.5 py-1.5 px-3 text-xs">
               {f.icon}
@@ -771,20 +1013,50 @@ function ProfileSetup() {
                 </div>
               </div>
 
-              {/* Skills */}
+              {/* Skills - Animated Tags */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <Sparkles className="h-4 w-4" />
                   Key Skills
                 </Label>
-                <Input
-                  placeholder="e.g., React, Node.js, Python, System Design..."
-                  value={form.skills}
-                  onChange={(e) => setForm((f) => ({ ...f, skills: e.target.value }))}
-                  className="h-11"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Type a skill and press Enter..."
+                    value={skillInput}
+                    onChange={(e) => setSkillInput(e.target.value)}
+                    onKeyDown={handleSkillKeyDown}
+                    className="h-11 flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-11 px-3"
+                    onClick={() => addSkill(skillInput)}
+                    disabled={!skillInput.trim()}
+                  >
+                    Add
+                  </Button>
+                </div>
+                {form.skills && <SkillTags skills={form.skills} />}
+                {/* Hidden X on skill tags */}
+                {form.skills && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {form.skills.split(',').map((s, i) => s.trim() && (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => removeSkill(s.trim())}
+                        className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                      >
+                        {s.trim()}
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
-                  Comma-separated skills to focus the interview on relevant topics
+                  Press Enter or comma to add skills
                 </p>
               </div>
 
@@ -809,6 +1081,32 @@ function ProfileSetup() {
                     <SelectItem value="5">5 - Excellent</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Practice Mode Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Lightbulb className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium">Practice Mode</span>
+                    <p className="text-xs text-muted-foreground">Get hints during the interview</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPracticeMode(!practiceMode)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    practiceMode ? 'bg-primary' : 'bg-muted'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      practiceMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
               </div>
 
               <Separator />
@@ -892,6 +1190,21 @@ function TypeBadge({ type }: { type: QuestionType }) {
   );
 }
 
+// ─── Star Rating Display ────────────────────────────────────────
+function StarRating({ score, size = 12 }: { score: number; size?: number }) {
+  return (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star
+          key={i}
+          className={`${i <= score ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground/30'}`}
+          style={{ width: size, height: size }}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ─── Stats Panel ─────────────────────────────────────────────────
 function StatsPanel({ compact = false }: { compact?: boolean }) {
   const { stats, profile, phase, completeInterview } = useInterviewStore();
@@ -972,7 +1285,7 @@ function StatsPanel({ compact = false }: { compact?: boolean }) {
             </div>
           </div>
 
-          {/* Difficulty Distribution */}
+          {/* Difficulty Distribution - with hover lift */}
           <div className="space-y-2.5">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">By Difficulty</div>
             <div className="grid grid-cols-3 gap-2">
@@ -981,7 +1294,7 @@ function StatsPanel({ compact = false }: { compact?: boolean }) {
                 { label: 'Medium', count: stats.mediumCount, color: 'text-amber-500', bg: 'bg-amber-500/10' },
                 { label: 'Hard', count: stats.hardCount, color: 'text-rose-500', bg: 'bg-rose-500/10' },
               ].map((item) => (
-                <div key={item.label} className={`text-center p-2.5 rounded-lg ${item.bg}`}>
+                <div key={item.label} className={`text-center p-2.5 rounded-lg ${item.bg} transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-default`}>
                   <div className={`text-xl font-bold tabular-nums ${item.color}`}>{item.count}</div>
                   <div className="text-[10px] text-muted-foreground font-medium">{item.label}</div>
                 </div>
@@ -1030,16 +1343,68 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// ─── Bookmark Button ────────────────────────────────────────────
+function BookmarkButton({ messageId, isBookmarked, onToggle }: { messageId: string; isBookmarked: boolean; onToggle: (id: string) => void }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onToggle(messageId); }}
+      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-muted/80"
+      title={isBookmarked ? 'Remove bookmark' : 'Bookmark this question'}
+    >
+      <Bookmark className={`h-3 w-3 ${isBookmarked ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground'}`} />
+    </button>
+  );
+}
+
+// ─── Message animation variants ─────────────────────────────────
+const messageVariants = {
+  hidden: (isInterviewer: boolean) => ({
+    opacity: 0,
+    x: isInterviewer ? -20 : 20,
+    y: 0,
+  }),
+  visible: {
+    opacity: 1,
+    x: 0,
+    y: 0,
+  },
+  exit: {
+    opacity: 0,
+    y: -10,
+  },
+};
+
+const messageContainerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+    },
+  },
+};
+
 // ─── Message Bubble ──────────────────────────────────────────────
-function MessageBubble({ message, questionIndex, questionStartTime }: { message: InterviewMessage; questionIndex?: number; questionStartTime?: Date | null }) {
+function MessageBubble({ message, questionIndex, questionStartTime, isBookmarked, onToggleBookmark, questionScore }: {
+  message: InterviewMessage;
+  questionIndex?: number;
+  questionStartTime?: Date | null;
+  isBookmarked?: boolean;
+  onToggleBookmark?: (id: string) => void;
+  questionScore?: { score: number; feedback: string } | null;
+}) {
   const isInterviewer = message.role === 'interviewer';
   const isSystem = message.role === 'system';
+  const isHint = isSystem && message.content.startsWith('[Hint]');
 
-  if (isSystem) {
+  if (isSystem && !isHint) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
+        custom={false}
+        variants={messageVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         transition={{ duration: 0.3 }}
         className="flex justify-center"
       >
@@ -1050,11 +1415,34 @@ function MessageBubble({ message, questionIndex, questionStartTime }: { message:
     );
   }
 
+  // Hint message
+  if (isHint) {
+    return (
+      <motion.div
+        custom={true}
+        variants={messageVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={{ duration: 0.3 }}
+        className="flex justify-center"
+      >
+        <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs px-4 py-2.5 rounded-xl max-w-[85%] sm:max-w-[75%]">
+          <Lightbulb className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <span>{message.content.replace('[Hint] ', '')}</span>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
+      custom={isInterviewer}
+      variants={messageVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      transition={{ duration: 0.35, ease: 'easeOut' }}
       className={`flex gap-2.5 ${isInterviewer ? 'justify-start' : 'justify-end'}`}
     >
       {isInterviewer && (
@@ -1083,6 +1471,15 @@ function MessageBubble({ message, questionIndex, questionStartTime }: { message:
         <div className="text-sm leading-relaxed whitespace-pre-wrap">
           <MessageContent content={message.content} />
         </div>
+
+        {/* Question score for candidate messages */}
+        {!isInterviewer && questionScore && (
+          <div className="flex items-center gap-1.5 pt-1">
+            <StarRating score={questionScore.score} />
+            <span className="text-[10px] opacity-60">{questionScore.feedback}</span>
+          </div>
+        )}
+
         <div className={`flex items-center justify-between ${isInterviewer ? '' : ''}`}>
           <div className={`text-[10px] ${isInterviewer ? 'text-muted-foreground' : 'text-primary-foreground/60'}`}>
             {new Date(message.timestamp).toLocaleTimeString([], {
@@ -1091,7 +1488,10 @@ function MessageBubble({ message, questionIndex, questionStartTime }: { message:
             })}
           </div>
           {isInterviewer && (
-            <CopyButton text={message.content} />
+            <div className="flex items-center gap-0.5">
+              <BookmarkButton messageId={message.id} isBookmarked={!!isBookmarked} onToggle={onToggleBookmark || (() => {})} />
+              <CopyButton text={message.content} />
+            </div>
           )}
         </div>
       </div>
@@ -1105,7 +1505,7 @@ function MessageBubble({ message, questionIndex, questionStartTime }: { message:
   );
 }
 
-// ─── Typing Indicator with Sound Wave ────────────────────────────
+// ─── 3-Dot Bouncing Typing Indicator ────────────────────────────
 function TypingIndicator() {
   return (
     <motion.div
@@ -1119,17 +1519,16 @@ function TypingIndicator() {
       </div>
       <div className="bg-card border shadow-sm rounded-2xl rounded-tl-md px-4 py-3">
         <div className="flex items-center gap-2.5">
-          {/* Sound wave bars */}
-          <div className="flex items-end gap-[3px] h-4">
-            {[1, 2, 3, 4, 3].map((h, i) => (
+          <div className="flex items-center gap-1.5">
+            {[0, 1, 2].map((i) => (
               <motion.div
                 key={i}
-                className="w-[3px] bg-primary/50 rounded-full"
-                animate={{ height: [4, h * 4, 4] }}
+                className="w-2 h-2 bg-primary/50 rounded-full"
+                animate={{ y: [0, -6, 0] }}
                 transition={{
                   duration: 0.6,
                   repeat: Infinity,
-                  delay: i * 0.1,
+                  delay: i * 0.15,
                   ease: 'easeInOut',
                 }}
               />
@@ -1139,6 +1538,31 @@ function TypingIndicator() {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+// ─── Skeleton Loading State ──────────────────────────────────────
+function ChatSkeleton() {
+  return (
+    <div className="space-y-4 p-4">
+      {/* Interviewer skeleton */}
+      <div className="flex gap-2.5">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full skeleton-shimmer" />
+        <div className="space-y-2 flex-1 max-w-[75%]">
+          <div className="h-4 skeleton-shimmer rounded-full w-3/4" />
+          <div className="h-4 skeleton-shimmer rounded-full w-1/2" />
+        </div>
+      </div>
+      {/* Another interviewer line */}
+      <div className="flex gap-2.5">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full skeleton-shimmer" />
+        <div className="space-y-2 flex-1 max-w-[75%]">
+          <div className="h-4 skeleton-shimmer rounded-full w-2/3" />
+          <div className="h-4 skeleton-shimmer rounded-full w-5/6" />
+          <div className="h-4 skeleton-shimmer rounded-full w-1/3" />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1159,6 +1583,11 @@ function InterviewChat() {
     interviewStartTime,
     questionStartTime,
     setQuestionStartTime,
+    bookmarkedQuestions,
+    toggleBookmark,
+    practiceMode,
+    questionScores,
+    setQuestionScore,
   } = useInterviewStore();
   const { toast } = useToast();
   const [input, setInput] = useState('');
@@ -1169,6 +1598,12 @@ function InterviewChat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useAutoResizeTextarea(input);
   const elapsed = useElapsedTime(interviewStartTime);
+
+  // Voice input
+  const handleVoiceTranscript = useCallback((text: string) => {
+    setInput(text);
+  }, []);
+  const { isListening, toggleListening } = useVoiceInput(handleVoiceTranscript);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -1187,12 +1622,10 @@ function InterviewChat() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+K = Skip
       if (e.ctrlKey && e.key === 'k') {
         e.preventDefault();
         handleSkip();
       }
-      // ? = Toggle shortcuts (only when not typing)
       if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
         const target = e.target as HTMLElement;
         if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
@@ -1200,7 +1633,6 @@ function InterviewChat() {
           setShowShortcuts((s) => !s);
         }
       }
-      // Escape = Close dialogs
       if (e.key === 'Escape') {
         setShowShortcuts(false);
         setShowResetDialog(false);
@@ -1212,14 +1644,14 @@ function InterviewChat() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   });
 
-  // Auto-start: generate first question when entering interview phase
+  // Auto-start
   useEffect(() => {
     if (phase === 'interview' && !interviewStarted && profile) {
       setInterviewStarted(true);
       addMessage({
         id: crypto.randomUUID(),
         role: 'system',
-        content: `Interview started for ${profile.role} (${profile.level}). Good luck!`,
+        content: `Interview started for ${profile.role} (${profile.level}). ${practiceMode ? 'Practice mode is ON - you can get hints!' : 'Good luck!'}`,
         timestamp: new Date(),
       });
       generateFirstQuestion();
@@ -1259,6 +1691,29 @@ function InterviewChat() {
     }
   };
 
+  // Auto-evaluate answer after sending
+  const evaluateAnswer = async (questionId: string, question: string, answer: string) => {
+    if (!profile) return;
+    try {
+      const res = await fetch('/api/interview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'evaluate',
+          question,
+          answer,
+          profile: { role: profile.role, level: profile.level },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setQuestionScore(questionId, { score: data.score, feedback: data.feedback });
+      }
+    } catch {
+      // Silent fail - scoring is optional
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -1270,8 +1725,15 @@ function InterviewChat() {
     };
 
     addMessage(candidateMsg);
+    const answerText = input.trim();
     setInput('');
     setIsLoading(true);
+
+    // Find the last interviewer question for evaluation
+    const lastInterviewerMsg = [...messages].reverse().find((m) => m.role === 'interviewer');
+    if (lastInterviewerMsg) {
+      evaluateAnswer(candidateMsg.id, lastInterviewerMsg.content, answerText);
+    }
 
     try {
       const res = await fetch('/api/interview', {
@@ -1364,6 +1826,46 @@ function InterviewChat() {
     }
   };
 
+  const handleHint = async () => {
+    if (isLoading || !practiceMode) return;
+
+    const lastInterviewerMsg = [...messages].reverse().find((m) => m.role === 'interviewer');
+    if (!lastInterviewerMsg) return;
+
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/interview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'hint',
+          profile,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            questionType: m.questionType,
+            difficulty: m.difficulty,
+          })),
+          question: lastInterviewerMsg.content,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.hint) {
+        addMessage({
+          id: crypto.randomUUID(),
+          role: 'system',
+          content: `[Hint] ${data.hint}`,
+          timestamp: new Date(),
+        });
+      }
+    } catch {
+      toast({ title: 'Hint Error', description: 'Could not generate hint', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && e.ctrlKey) {
       e.preventDefault();
@@ -1382,6 +1884,14 @@ function InterviewChat() {
   if (phase === 'complete') {
     return <InterviewSummary onRestart={handleReset} />;
   }
+
+  // Find the last interviewer question for pairing with candidate answers
+  const getLastInterviewerIdBefore = (msgIndex: number) => {
+    for (let i = msgIndex - 1; i >= 0; i--) {
+      if (messages[i].role === 'interviewer') return messages[i].id;
+    }
+    return null;
+  };
 
   return (
     <div className="h-screen flex bg-background">
@@ -1421,9 +1931,16 @@ function InterviewChat() {
               <Timer className="h-3 w-3" />
               {elapsed}
             </Badge>
+            <ProgressRing current={stats.totalQuestions} total={10} />
             <Badge variant="outline" className="text-xs tabular-nums">
               Q{stats.totalQuestions}
             </Badge>
+            {bookmarkedQuestions.length > 0 && (
+              <Badge variant="secondary" className="text-xs gap-1 hidden sm:inline-flex">
+                <Bookmark className="h-3 w-3 fill-amber-400 text-amber-400" />
+                {bookmarkedQuestions.length}
+              </Badge>
+            )}
             {stats.totalQuestions > 0 && (
               <Badge variant="secondary" className="text-xs gap-1 hidden sm:inline-flex">
                 <Clock className="h-3 w-3" />
@@ -1433,7 +1950,6 @@ function InterviewChat() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Keyboard Shortcuts Button */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1514,26 +2030,45 @@ function InterviewChat() {
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 scroll-smooth custom-scrollbar">
           {messages.length === 0 && !isLoading && (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center space-y-3">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                <p className="text-sm text-muted-foreground">Preparing your first question...</p>
-              </div>
-            </div>
+            <ChatSkeleton />
           )}
 
-          <AnimatePresence>
+          <motion.div
+            variants={messageContainerVariants}
+            initial="hidden"
+            animate="visible"
+          >
             {(() => {
               let qi = 0;
-              return messages.map((msg) => {
+              return messages.map((msg, idx) => {
                 if (msg.role === 'interviewer' && msg.questionType) {
                   qi++;
-                  return <MessageBubble key={msg.id} message={msg} questionIndex={qi} questionStartTime={questionStartTime} />;
+                  return (
+                    <MessageBubble
+                      key={msg.id}
+                      message={msg}
+                      questionIndex={qi}
+                      questionStartTime={questionStartTime}
+                      isBookmarked={bookmarkedQuestions.includes(msg.id)}
+                      onToggleBookmark={toggleBookmark}
+                    />
+                  );
                 }
-                return <MessageBubble key={msg.id} message={msg} />;
+                // For candidate messages, find the corresponding question score
+                const lastInterviewerId = getLastInterviewerIdBefore(idx);
+                const score = msg.role === 'candidate' && lastInterviewerId
+                  ? questionScores[msg.id] || null
+                  : undefined;
+                return (
+                  <MessageBubble
+                    key={msg.id}
+                    message={msg}
+                    questionScore={score}
+                  />
+                );
               });
             })()}
-          </AnimatePresence>
+          </motion.div>
 
           <AnimatePresence>
             {isLoading && <TypingIndicator />}
@@ -1541,9 +2076,28 @@ function InterviewChat() {
         </div>
 
         {/* Input Area - Glass */}
-        <div className="border-t p-3 sm:p-4 flex-shrink-0 bg-background/50 backdrop-blur-xl">
+        <div className="border-t p-3 sm:p-4 flex-shrink-0 bg-background/50 backdrop-blur-xl no-print">
           <div className="max-w-3xl mx-auto">
             <div className="flex gap-2 items-end">
+              {/* Voice Input Button */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className={`h-11 w-11 flex-shrink-0 rounded-xl ${isListening ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 animate-pulse' : ''}`}
+                      onClick={toggleListening}
+                    >
+                      {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{isListening ? 'Stop recording' : 'Voice input'}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
               <div className="flex-1 relative">
                 <Textarea
                   ref={textareaRef}
@@ -1555,7 +2109,35 @@ function InterviewChat() {
                   className="min-h-[44px] max-h-40 resize-none rounded-xl pr-4 py-3 text-sm"
                   rows={1}
                 />
+                {isListening && (
+                  <div className="absolute top-1 right-2 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                    <span className="text-[10px] text-rose-500">Recording</span>
+                  </div>
+                )}
               </div>
+              {/* Hint button (practice mode only) */}
+              {practiceMode && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={handleHint}
+                        disabled={isLoading || stats.totalQuestions < 1}
+                        variant="outline"
+                        size="icon"
+                        className="h-11 w-11 flex-shrink-0 rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+                        title="Get a hint"
+                      >
+                        <Lightbulb className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Get a hint</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               <Button
                 onClick={handleSkip}
                 disabled={isLoading || stats.totalQuestions < 1}
@@ -1586,6 +2168,51 @@ function InterviewChat() {
             </div>
           </div>
         </div>
+
+        {/* Mobile Bottom Bar - visible on md: and below */}
+        <div className="md:hidden flex items-center gap-2 p-2 border-t bg-background/80 backdrop-blur-xl no-print">
+          <Button
+            onClick={handleSend}
+            disabled={isLoading || !input.trim()}
+            className="flex-1 h-10 gap-1 text-xs"
+            size="sm"
+          >
+            <Send className="h-3.5 w-3.5" />
+            Send
+          </Button>
+          {practiceMode && (
+            <Button
+              onClick={handleHint}
+              disabled={isLoading || stats.totalQuestions < 1}
+              variant="outline"
+              className="h-10 gap-1 text-xs border-amber-500/30 text-amber-600"
+              size="sm"
+            >
+              <Lightbulb className="h-3.5 w-3.5" />
+              Hint
+            </Button>
+          )}
+          <Button
+            onClick={handleSkip}
+            disabled={isLoading || stats.totalQuestions < 1}
+            variant="outline"
+            className="h-10 gap-1 text-xs"
+            size="sm"
+          >
+            <SkipForward className="h-3.5 w-3.5" />
+            Skip
+          </Button>
+          <Button
+            onClick={completeInterview}
+            disabled={stats.totalQuestions < 1}
+            variant="outline"
+            className="h-10 gap-1 text-xs hover:bg-rose-500/10 hover:text-rose-600 hover:border-rose-500/30"
+            size="sm"
+          >
+            <Trophy className="h-3.5 w-3.5" />
+            End
+          </Button>
+        </div>
       </main>
     </div>
   );
@@ -1612,7 +2239,7 @@ function FeedbackSection({ feedback, isLoading }: { feedback: { overallScore: nu
   if (!feedback) return null;
 
   return (
-    <Card className="border-2 border-primary/20 overflow-hidden">
+    <Card className="border-2 border-primary/20 overflow-hidden print-card">
       {/* Header with shimmer */}
       <div className="bg-primary/5 px-6 py-4 border-b relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent animate-shimmer" />
@@ -1628,6 +2255,17 @@ function FeedbackSection({ feedback, isLoading }: { feedback: { overallScore: nu
         {/* Score Donut */}
         <div className="flex justify-center py-2">
           <ScoreDonut score={feedback.overallScore} />
+        </div>
+
+        {/* Performance Radar Chart */}
+        <div className="flex justify-center py-2">
+          <PerformanceRadar scores={{
+            DSA: Math.min(5, Math.max(1, Math.round(feedback.overallScore / 2))),
+            SystemDesign: Math.min(5, Math.max(1, Math.round(feedback.overallScore / 2.2))),
+            HR: Math.min(5, Math.max(1, Math.round(feedback.overallScore / 1.8))),
+            Communication: Math.min(5, Math.max(1, Math.round(feedback.overallScore / 1.9))),
+            ProblemSolving: Math.min(5, Math.max(1, Math.round(feedback.overallScore / 1.7))),
+          }} />
         </div>
 
         {/* Summary */}
@@ -1685,7 +2323,7 @@ function FeedbackSection({ feedback, isLoading }: { feedback: { overallScore: nu
 
 // ─── Interview Summary ───────────────────────────────────────────
 function InterviewSummary({ onRestart }: { onRestart: () => void }) {
-  const { stats, profile, messages, feedback, feedbackLoading, setFeedback, setFeedbackLoading, interviewStartTime, saveToHistory } = useInterviewStore();
+  const { stats, profile, messages, feedback, feedbackLoading, setFeedback, setFeedbackLoading, interviewStartTime, saveToHistory, bookmarkedQuestions, questionScores } = useInterviewStore();
   const { toast } = useToast();
   const [feedbackRequested, setFeedbackRequested] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -1758,7 +2396,7 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
         setFeedback(data.feedback);
       }
     } catch {
-      // Feedback is optional, don't show error
+      // Feedback is optional
     } finally {
       setFeedbackLoading(false);
     }
@@ -1778,6 +2416,7 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
         difficulty: m.difficulty,
         timestamp: new Date(m.timestamp).toISOString(),
       })),
+      questionScores,
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -1791,11 +2430,15 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
     toast({ title: 'Exported!', description: 'Interview transcript saved as JSON' });
   };
 
+  const handleDownloadPDF = () => {
+    window.print();
+  };
+
   const handleCopyTranscript = () => {
     const lines = messages
-      .filter((m) => m.role !== 'system')
+      .filter((m) => m.role !== 'system' || m.content.startsWith('[Hint]'))
       .map((m) => {
-        const prefix = m.role === 'interviewer' ? 'Interviewer' : 'You';
+        const prefix = m.role === 'interviewer' ? 'Interviewer' : m.role === 'candidate' ? 'You' : 'Hint';
         const tags = m.questionType ? ` [${m.questionType}, ${m.difficulty}]` : '';
         return `${prefix}${tags}: ${m.content}`;
       });
@@ -1807,12 +2450,24 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
     toast({ title: 'Copied!', description: 'Transcript copied to clipboard' });
   };
 
+  // Get bookmarked questions
+  const bookmarkedMessages = messages.filter((m) => bookmarkedQuestions.includes(m.id));
+
+  // Get Q&A pairs for summary
+  const qaPairs: Array<{ question: InterviewMessage; answer?: InterviewMessage; score?: { score: number; feedback: string } }> = [];
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].role === 'interviewer' && messages[i].questionType) {
+      const answer = messages[i + 1]?.role === 'candidate' ? messages[i + 1] : undefined;
+      const score = answer ? questionScores[answer.id] : undefined;
+      qaPairs.push({ question: messages[i], answer, score });
+    }
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-muted/30 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-muted/30 relative overflow-hidden print-container">
       {showConfetti && <ConfettiEffect />}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
+      <div className="absolute inset-0 overflow-hidden pointer-events-none no-print">
+        <FloatingOrbs />
       </div>
 
       <motion.div
@@ -1821,9 +2476,16 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
         transition={{ duration: 0.5 }}
         className="w-full max-w-lg relative"
       >
-        <div className="flex justify-end mb-2">
+        <div className="flex justify-end mb-2 no-print">
           <ThemeToggle />
         </div>
+
+        {/* Print Header (only visible in print) */}
+        <div className="hidden print-header" style={{ display: 'none' }}>
+          <h1>Interview Report</h1>
+          <p>{profile?.role} ({profile?.level}) · {new Date().toLocaleDateString()}</p>
+        </div>
+
         <div className="text-center mb-8">
           <motion.div
             initial={{ scale: 0, rotate: -180 }}
@@ -1842,7 +2504,7 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
           <FeedbackSection feedback={feedback} isLoading={feedbackLoading} />
 
           {/* Session Stats - Glass */}
-          <Card className="border-2 shadow-xl shadow-black/5 bg-background/50 backdrop-blur-md border-white/10 dark:border-white/5">
+          <Card className="border-2 shadow-xl shadow-black/5 bg-background/50 backdrop-blur-md border-white/10 dark:border-white/5 print-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5 text-primary" />
@@ -1923,17 +2585,70 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
                 ))}
               </div>
 
+              {/* Per-Question Scores */}
+              {qaPairs.length > 0 && Object.keys(questionScores).length > 0 && (
+                <div className="space-y-3">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Per-Question Scores</div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                    {qaPairs.map((pair, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border/50">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <Badge variant="secondary" className="text-[10px] flex-shrink-0">Q{i + 1}</Badge>
+                          <span className="text-xs truncate">{pair.question.content}</span>
+                        </div>
+                        {pair.score && (
+                          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                            <StarRating score={pair.score.score} size={10} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bookmarked Questions */}
+              {bookmarkedMessages.length > 0 && (
+                <div className="space-y-3">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                    <Bookmark className="h-3 w-3 fill-amber-400 text-amber-400" />
+                    Bookmarked Questions ({bookmarkedMessages.length})
+                  </div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                    {bookmarkedMessages.map((msg, i) => {
+                      // Find the answer that follows this question
+                      const msgIdx = messages.indexOf(msg);
+                      const answer = messages[msgIdx + 1]?.role === 'candidate' ? messages[msgIdx + 1] : null;
+                      return (
+                        <div key={msg.id} className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            {msg.questionType && <TypeBadge type={msg.questionType} />}
+                            {msg.difficulty && <DifficultyBadge difficulty={msg.difficulty} />}
+                          </div>
+                          <p className="text-xs font-medium">{msg.content}</p>
+                          {answer && (
+                            <p className="text-xs text-muted-foreground mt-1.5 pl-2 border-l-2 border-primary/30">
+                              {answer.content.slice(0, 150)}{answer.content.length > 150 ? '...' : ''}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <Separator />
 
               {/* Export Buttons */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 no-print">
                 <Button
                   variant="outline"
                   className="flex-1 gap-2"
-                  onClick={handleExportJSON}
+                  onClick={handleDownloadPDF}
                 >
-                  <FileJson className="h-4 w-4" />
-                  Export JSON
+                  <Printer className="h-4 w-4" />
+                  Download PDF
                 </Button>
                 <Button
                   variant="outline"
@@ -1946,8 +2661,17 @@ function InterviewSummary({ onRestart }: { onRestart: () => void }) {
               </div>
 
               <Button
+                onClick={handleExportJSON}
+                variant="outline"
+                className="w-full gap-2 no-print"
+              >
+                <FileJson className="h-4 w-4" />
+                Export JSON
+              </Button>
+
+              <Button
                 onClick={onRestart}
-                className="w-full h-12 text-base font-semibold gap-2 shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-transform bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary text-primary-foreground"
+                className="w-full h-12 text-base font-semibold gap-2 shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-transform bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary text-primary-foreground no-print"
                 size="lg"
               >
                 <RotateCcw className="h-5 w-5" />

@@ -19,6 +19,7 @@ export interface CandidateProfile {
   level: ExperienceLevel;
   skills: string;
   previousScore: string;
+  practiceMode?: boolean;
 }
 
 export interface InterviewStats {
@@ -49,6 +50,11 @@ export interface InterviewHistoryEntry {
   skills: string;
 }
 
+export interface QuestionScore {
+  score: number;
+  feedback: string;
+}
+
 interface InterviewState {
   phase: 'setup' | 'interview' | 'complete';
   profile: CandidateProfile | null;
@@ -63,6 +69,9 @@ interface InterviewState {
   sessionId: string;
   questionStartTime: Date | null;
   history: InterviewHistoryEntry[];
+  bookmarkedQuestions: string[];
+  practiceMode: boolean;
+  questionScores: Record<string, QuestionScore>;
 
   setProfile: (profile: CandidateProfile) => void;
   startInterview: () => void;
@@ -78,6 +87,9 @@ interface InterviewState {
   loadHistory: () => void;
   saveToHistory: (entry: InterviewHistoryEntry) => void;
   clearHistory: () => void;
+  toggleBookmark: (id: string) => void;
+  setPracticeMode: (enabled: boolean) => void;
+  setQuestionScore: (messageId: string, score: QuestionScore) => void;
 }
 
 const HISTORY_KEY = 'ai-interviewer-history';
@@ -123,6 +135,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   sessionId: '',
   questionStartTime: null,
   history: [],
+  bookmarkedQuestions: [],
+  practiceMode: false,
+  questionScores: {},
 
   setProfile: (profile) => set({ profile }),
 
@@ -172,6 +187,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       feedbackLoading: false,
       sessionId: '',
       questionStartTime: null,
+      bookmarkedQuestions: [],
+      practiceMode: false,
+      questionScores: {},
     }),
 
   completeInterview: () => set({ phase: 'complete' }),
@@ -200,4 +218,18 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       localStorage.removeItem(HISTORY_KEY);
     }
   },
+
+  toggleBookmark: (id) =>
+    set((state) => ({
+      bookmarkedQuestions: state.bookmarkedQuestions.includes(id)
+        ? state.bookmarkedQuestions.filter((qid) => qid !== id)
+        : [...state.bookmarkedQuestions, id],
+    })),
+
+  setPracticeMode: (enabled) => set({ practiceMode: enabled }),
+
+  setQuestionScore: (messageId, score) =>
+    set((state) => ({
+      questionScores: { ...state.questionScores, [messageId]: score },
+    })),
 }));

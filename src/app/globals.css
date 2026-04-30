@@ -45,71 +45,71 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.99 0.002 170);
+  --foreground: oklch(0.15 0.02 170);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.15 0.02 170);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.15 0.02 170);
+  --primary: oklch(0.55 0.15 170);
+  --primary-foreground: oklch(0.99 0.005 170);
+  --secondary: oklch(0.96 0.02 170);
+  --secondary-foreground: oklch(0.25 0.05 170);
+  --muted: oklch(0.96 0.015 170);
+  --muted-foreground: oklch(0.5 0.04 170);
+  --accent: oklch(0.94 0.04 170);
+  --accent-foreground: oklch(0.25 0.05 170);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: oklch(0.91 0.02 170);
+  --input: oklch(0.91 0.02 170);
+  --ring: oklch(0.55 0.15 170);
+  --chart-1: oklch(0.55 0.15 170);
+  --chart-2: oklch(0.65 0.12 45);
+  --chart-3: oklch(0.6 0.18 280);
+  --chart-4: oklch(0.7 0.15 60);
+  --chart-5: oklch(0.65 0.2 340);
+  --sidebar: oklch(0.98 0.01 170);
+  --sidebar-foreground: oklch(0.15 0.02 170);
+  --sidebar-primary: oklch(0.55 0.15 170);
+  --sidebar-primary-foreground: oklch(0.99 0.005 170);
+  --sidebar-accent: oklch(0.94 0.04 170);
+  --sidebar-accent-foreground: oklch(0.25 0.05 170);
+  --sidebar-border: oklch(0.91 0.02 170);
+  --sidebar-ring: oklch(0.55 0.15 170);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.15 0.02 170);
+  --foreground: oklch(0.96 0.01 170);
+  --card: oklch(0.2 0.03 170);
+  --card-foreground: oklch(0.96 0.01 170);
+  --popover: oklch(0.2 0.03 170);
+  --popover-foreground: oklch(0.96 0.01 170);
+  --primary: oklch(0.75 0.15 170);
+  --primary-foreground: oklch(0.15 0.02 170);
+  --secondary: oklch(0.25 0.03 170);
+  --secondary-foreground: oklch(0.96 0.01 170);
+  --muted: oklch(0.25 0.03 170);
+  --muted-foreground: oklch(0.65 0.04 170);
+  --accent: oklch(0.25 0.04 170);
+  --accent-foreground: oklch(0.96 0.01 170);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.75 0.15 170);
+  --chart-1: oklch(0.75 0.15 170);
+  --chart-2: oklch(0.7 0.15 45);
+  --chart-3: oklch(0.65 0.18 280);
+  --chart-4: oklch(0.75 0.15 60);
+  --chart-5: oklch(0.7 0.2 340);
+  --sidebar: oklch(0.2 0.03 170);
+  --sidebar-foreground: oklch(0.96 0.01 170);
+  --sidebar-primary: oklch(0.75 0.15 170);
+  --sidebar-primary-foreground: oklch(0.15 0.02 170);
+  --sidebar-accent: oklch(0.25 0.04 170);
+  --sidebar-accent-foreground: oklch(0.96 0.01 170);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.75 0.15 170);
 }
 
 @layer base {
@@ -131,6 +131,68 @@
   animation: shimmer 3s ease-in-out infinite;
 }
 
+/* Floating orbs animation */
+@keyframes float1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -20px) scale(1.05); }
+  50% { transform: translate(-20px, -40px) scale(0.95); }
+  75% { transform: translate(-30px, 10px) scale(1.02); }
+}
+
+@keyframes float2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(-40px, 20px) scale(0.98); }
+  50% { transform: translate(20px, 30px) scale(1.05); }
+  75% { transform: translate(30px, -20px) scale(0.96); }
+}
+
+@keyframes float3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(20px, 30px) scale(1.03); }
+  50% { transform: translate(-30px, -10px) scale(0.97); }
+  75% { transform: translate(-10px, 20px) scale(1.04); }
+}
+
+.animate-float1 {
+  animation: float1 20s ease-in-out infinite;
+}
+
+.animate-float2 {
+  animation: float2 25s ease-in-out infinite;
+}
+
+.animate-float3 {
+  animation: float3 18s ease-in-out infinite;
+}
+
+/* Skeleton shimmer */
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    oklch(0.93 0.01 170) 25%,
+    oklch(0.88 0.03 170) 50%,
+    oklch(0.93 0.01 170) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.dark .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    oklch(0.25 0.02 170) 25%,
+    oklch(0.3 0.04 170) 50%,
+    oklch(0.25 0.02 170) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
 /* Custom scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
@@ -150,4 +212,85 @@
 }
 .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: oklch(0.5 0 0 / 50%);
+}
+
+/* Print styles for PDF export */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide non-printable elements */
+  .no-print,
+  button:not(.print-keep),
+  nav,
+  [data-no-print],
+  .fixed,
+  .animate-shimmer,
+  .animate-float1,
+  .animate-float2,
+  .animate-float3,
+  .skeleton-shimmer {
+    display: none !important;
+  }
+
+  /* Simplify layout for A4 */
+  .print-container {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Ensure cards have borders for print */
+  .print-card {
+    border: 1px solid #e5e7eb !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    background: white !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Make score donut visible in print */
+  .print-card svg circle {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Page breaks */
+  .print-page-break {
+    page-break-before: always;
+  }
+
+  /* Ensure text is readable */
+  .print-card * {
+    color: black !important;
+  }
+
+  /* Print header */
+  .print-header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e5e7eb;
+  }
+
+  .print-header h1 {
+    font-size: 24px;
+    margin-bottom: 4px;
+  }
+
+  .print-header p {
+    font-size: 12px;
+    color: #666 !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 1.5cm;
+  }
 }

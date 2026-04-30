@@ -64,6 +64,39 @@ You MUST respond with valid JSON in exactly this format:
 
 IMPORTANT: Only respond with the JSON object, nothing else. No markdown, no explanation.`;
 
+const HINT_PROMPT = `You are an expert technical interviewer helping a candidate in practice mode.
+
+The candidate has asked for a hint on the current question. Provide a helpful hint that:
+1. Points them in the right direction without giving away the answer
+2. Suggests an approach or technique to consider
+3. Is concise (1-2 sentences max)
+
+You MUST respond with valid JSON in exactly this format:
+{
+  "hint": "your helpful hint here"
+}
+
+IMPORTANT: Only respond with the JSON object, nothing else. No markdown, no explanation.`;
+
+const EVALUATE_PROMPT = `You are an expert technical interviewer evaluating a candidate's answer to a specific question.
+
+Evaluate the answer on a scale of 1-5 stars:
+- 1: Completely incorrect or no relevant response
+- 2: Partially correct but major gaps
+- 3: Acceptable answer with some good points
+- 4: Strong answer with minor gaps
+- 5: Excellent, comprehensive answer
+
+Provide brief feedback (1 sentence).
+
+You MUST respond with valid JSON in exactly this format:
+{
+  "score": <number from 1-5>,
+  "feedback": "brief feedback sentence"
+}
+
+IMPORTANT: Only respond with the JSON object, nothing else. No markdown, no explanation.`;
+
 let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
 
 async function getZAI() {
@@ -76,10 +109,18 @@ async function getZAI() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { profile, messages, action } = body;
+    const { profile, messages, action, question, answer } = body;
 
     if (action === 'feedback') {
       return await handleFeedback(profile, messages);
+    }
+
+    if (action === 'hint') {
+      return await handleHint(profile, messages, question);
+    }
+
+    if (action === 'evaluate') {
+      return await handleEvaluate(question, answer, profile);
     }
 
     if (!profile || !profile.role || !profile.level) {
@@ -97,6 +138,7 @@ export async function POST(request: NextRequest) {
 - Experience Level: ${profile.level}
 - Skills: ${profile.skills || 'Not specified'}
 - Previous Performance Score: ${profile.previousScore || 'Not available'}
+${profile.practiceMode ? '- Practice Mode: Enabled (hints are available)' : ''}
 
 Generate the first interview question for this candidate. Start with an appropriate difficulty level based on their experience.`;
 
@@ -164,7 +206,7 @@ Generate the first interview question for this candidate. Start with an appropri
     }
 
     return NextResponse.json(
-      { error: 'Invalid action. Use "start", "next", "skip", or "feedback"' },
+      { error: 'Invalid action. Use "start", "next", "skip", "hint", "evaluate", or "feedback"' },
       { status: 400 }
     );
   } catch (error) {
@@ -173,6 +215,102 @@ Generate the first interview question for this candidate. Start with an appropri
       { error: 'Failed to generate question' },
       { status: 500 }
     );
+  }
+}
+
+async function handleHint(
+  profile: { role: string; level: string; skills: string },
+  messages: Array<{ role: string; content: string; questionType?: string; difficulty?: string }>,
+  question?: string
+) {
+  const zai = await getZAI();
+
+  let context = `Candidate Profile:
+- Role: ${profile.role}
+- Experience Level: ${profile.level}
+- Skills: ${profile.skills || 'Not specified'}
+
+`;
+
+  if (question) {
+    context += `Current Question: ${question}\n\n`;
+  } else {
+    // Find the last interviewer question
+    const interviewerMsgs = messages.filter((m) => m.role === 'interviewer');
+    const lastQuestion = interviewerMsgs[interviewerMsgs.length - 1];
+    if (lastQuestion) {
+      context += `Current Question: ${lastQuestion.content}\n\n`;
+    }
+  }
+
+  context += HINT_PROMPT;
+
+  try {
+    const completion = await zai.chat.completions.create({
+      messages: [
+        { role: 'assistant', content: HINT_PROMPT },
+        { role: 'user', content: context },
+      ],
+      thinking: { type: 'disabled' },
+    });
+
+    const responseText = completion.choices[0]?.message?.content?.trim() || '';
+    const parsed = parseHintResponse(responseText);
+
+    return NextResponse.json({
+      success: true,
+      hint: parsed.hint,
+    });
+  } catch (error) {
+    console.error('Hint generation error:', error);
+    return NextResponse.json({
+      success: true,
+      hint: 'Think about breaking the problem into smaller sub-problems and consider common data structures that might help.',
+    });
+  }
+}
+
+async function handleEvaluate(
+  question: string,
+  answer: string,
+  profile: { role: string; level: string }
+) {
+  const zai = await getZAI();
+
+  const context = `Candidate Profile:
+- Role: ${profile.role}
+- Experience Level: ${profile.level}
+
+Question: ${question}
+
+Candidate's Answer: ${answer}
+
+${EVALUATE_PROMPT}`;
+
+  try {
+    const completion = await zai.chat.completions.create({
+      messages: [
+        { role: 'assistant', content: EVALUATE_PROMPT },
+        { role: 'user', content: context },
+      ],
+      thinking: { type: 'disabled' },
+    });
+
+    const responseText = completion.choices[0]?.message?.content?.trim() || '';
+    const parsed = parseEvaluateResponse(responseText);
+
+    return NextResponse.json({
+      success: true,
+      score: parsed.score,
+      feedback: parsed.feedback,
+    });
+  } catch (error) {
+    console.error('Evaluate error:', error);
+    return NextResponse.json({
+      success: true,
+      score: 3,
+      feedback: 'Answer recorded.',
+    });
   }
 }
 
@@ -315,6 +453,48 @@ function parseJSONResponse(text: string): {
       type: 'HR/Behavioral',
       difficulty: 'medium',
     };
+  }
+}
+
+function parseHintResponse(text: string): { hint: string } {
+  try {
+    const parsed = JSON.parse(text);
+    return { hint: parsed.hint || 'Think about breaking the problem into smaller sub-problems.' };
+  } catch {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return { hint: parsed.hint || 'Think about breaking the problem into smaller sub-problems.' };
+      } catch {
+        // fall through
+      }
+    }
+    return { hint: text.replace(/[{}"]/g, '').trim() || 'Think about breaking the problem into smaller sub-problems.' };
+  }
+}
+
+function parseEvaluateResponse(text: string): { score: number; feedback: string } {
+  try {
+    const parsed = JSON.parse(text);
+    return {
+      score: Math.min(5, Math.max(1, Number(parsed.score) || 3)),
+      feedback: parsed.feedback || 'Answer recorded.',
+    };
+  } catch {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          score: Math.min(5, Math.max(1, Number(parsed.score) || 3)),
+          feedback: parsed.feedback || 'Answer recorded.',
+        };
+      } catch {
+        // fall through
+      }
+    }
+    return { score: 3, feedback: 'Answer recorded.' };
   }
 }
 
