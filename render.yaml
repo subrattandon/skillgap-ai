@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: skillgap-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    rootDir: backend
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ZAI_API_KEY
+        sync: false
+      - key: ZAI_GATEWAY_URL
+        value: https://api.z-ai.io/v1

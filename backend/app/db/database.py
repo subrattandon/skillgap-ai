@@ -12,9 +12,12 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from ..config import settings
 
+# SQLite-specific args are only needed for local development
+connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False},  # SQLite-specific
+    connect_args=connect_args,
     echo=settings.debug,
 )
 

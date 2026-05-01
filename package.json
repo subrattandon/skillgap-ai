@@ -4,15 +4,15 @@
   "private": true,
   "description": "AI-Powered Technical Interview Simulator & Skill Gap Analyzer",
   "scripts": {
-    "dev": "cd frontend && next dev -p 3000 2>&1 | tee dev.log",
-    "dev:frontend": "cd frontend && next dev -p 3000 2>&1 | tee dev.log",
-    "dev:backend": "cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
-    "build": "cd frontend && next build",
-    "lint": "cd frontend && eslint src/",
-    "db:push": "cd frontend && prisma db push",
-    "db:generate": "cd frontend && prisma generate",
-    "db:migrate": "cd frontend && prisma migrate dev",
-    "db:reset": "cd frontend && prisma migrate reset"
+    "dev": "cd frontend && npx next dev -p 3000",
+    "dev:frontend": "cd frontend && npx next dev -p 3000",
+    "dev:backend": "cd backend && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "build": "cd frontend && npx next build",
+    "lint": "cd frontend && npx eslint src/",
+    "db:push": "cd frontend && npx prisma db push",
+    "db:generate": "cd frontend && npx prisma generate",
+    "db:migrate": "cd frontend && npx prisma migrate dev",
+    "db:reset": "cd frontend && npx prisma migrate reset"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
