@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const SYSTEM_PROMPT = `You are an expert technical interviewer from a top product company (Google, Amazon, Microsoft level).
 
@@ -97,13 +97,43 @@ You MUST respond with valid JSON in exactly this format:
 
 IMPORTANT: Only respond with the JSON object, nothing else. No markdown, no explanation.`;
 
-let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
+// Ordered fallback list — if one model hits quota/is deprecated, next one is tried automatically
+const MODEL_FALLBACKS = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-2.5-pro',
+];
 
-async function getZAI() {
-  if (!zaiInstance) {
-    zaiInstance = await ZAI.create();
+function getGeminiModel(modelName: string) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not set in .env.local');
   }
-  return zaiInstance;
+  return new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: modelName });
+}
+
+async function generateText(prompt: string): Promise<string> {
+  let lastError: unknown = null;
+
+  for (const modelName of MODEL_FALLBACKS) {
+    try {
+      const model = getGeminiModel(modelName);
+      const result = await model.generateContent(prompt);
+      return result.response.text().trim();
+    } catch (err: unknown) {
+      const e = err as { status?: number };
+      // Only fallback on quota (429) or model-not-found (404) errors
+      if (e?.status === 429 || e?.status === 404) {
+        console.warn(`[Interview API] Model "${modelName}" failed (${e.status}), trying next...`);
+        lastError = err;
+        continue;
+      }
+      throw err; // Auth errors, bad requests — fail immediately
+    }
+  }
+
+  throw lastError ?? new Error('All Gemini models exhausted');
 }
 
 export async function POST(request: NextRequest) {
@@ -130,13 +160,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const zai = await getZAI();
-
     // Build question type focus instruction if provided
     const typeFocusInstruction = buildTypeFocusInstruction(questionTypes);
 
     if (action === 'start') {
-      const profileContext = `Candidate Profile:
+      const profileContext = `${SYSTEM_PROMPT}
+
+Candidate Profile:
 - Role: ${profile.role}
 - Experience Level: ${profile.level}
 - Skills: ${profile.skills || 'Not specified'}
@@ -146,15 +176,7 @@ ${typeFocusInstruction}
 
 Generate the first interview question for this candidate. Start with an appropriate difficulty level based on their experience.`;
 
-      const completion = await zai.chat.completions.create({
-        messages: [
-          { role: 'assistant', content: SYSTEM_PROMPT },
-          { role: 'user', content: profileContext },
-        ],
-        thinking: { type: 'disabled' },
-      });
-
-      const responseText = completion.choices[0]?.message?.content?.trim() || '';
+      const responseText = await generateText(profileContext);
       const parsed = parseJSONResponse(responseText);
 
       return NextResponse.json({
@@ -167,16 +189,7 @@ Generate the first interview question for this candidate. Start with an appropri
 
     if (action === 'next') {
       const conversationContext = buildConversationContext(profile, messages, typeFocusInstruction);
-
-      const completion = await zai.chat.completions.create({
-        messages: [
-          { role: 'assistant', content: SYSTEM_PROMPT },
-          { role: 'user', content: conversationContext },
-        ],
-        thinking: { type: 'disabled' },
-      });
-
-      const responseText = completion.choices[0]?.message?.content?.trim() || '';
+      const responseText = await generateText(`${SYSTEM_PROMPT}\n\n${conversationContext}`);
       const parsed = parseJSONResponse(responseText);
 
       return NextResponse.json({
@@ -189,16 +202,7 @@ Generate the first interview question for this candidate. Start with an appropri
 
     if (action === 'skip') {
       const skipContext = buildSkipContext(profile, messages, typeFocusInstruction);
-
-      const completion = await zai.chat.completions.create({
-        messages: [
-          { role: 'assistant', content: SYSTEM_PROMPT },
-          { role: 'user', content: skipContext },
-        ],
-        thinking: { type: 'disabled' },
-      });
-
-      const responseText = completion.choices[0]?.message?.content?.trim() || '';
+      const responseText = await generateText(`${SYSTEM_PROMPT}\n\n${skipContext}`);
       const parsed = parseJSONResponse(responseText);
 
       return NextResponse.json({
@@ -238,9 +242,9 @@ async function handleHint(
   messages: Array<{ role: string; content: string; questionType?: string; difficulty?: string }>,
   question?: string
 ) {
-  const zai = await getZAI();
+  let context = `${HINT_PROMPT}
 
-  let context = `Candidate Profile:
+Candidate Profile:
 - Role: ${profile.role}
 - Experience Level: ${profile.level}
 - Skills: ${profile.skills || 'Not specified'}
@@ -258,18 +262,10 @@ async function handleHint(
     }
   }
 
-  context += HINT_PROMPT;
+  context += 'Now provide a helpful hint:';
 
   try {
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: 'assistant', content: HINT_PROMPT },
-        { role: 'user', content: context },
-      ],
-      thinking: { type: 'disabled' },
-    });
-
-    const responseText = completion.choices[0]?.message?.content?.trim() || '';
+    const responseText = await generateText(context);
     const parsed = parseHintResponse(responseText);
 
     return NextResponse.json({
@@ -290,9 +286,9 @@ async function handleEvaluate(
   answer: string,
   profile: { role: string; level: string }
 ) {
-  const zai = await getZAI();
+  const context = `${EVALUATE_PROMPT}
 
-  const context = `Candidate Profile:
+Candidate Profile:
 - Role: ${profile.role}
 - Experience Level: ${profile.level}
 
@@ -300,18 +296,10 @@ Question: ${question}
 
 Candidate's Answer: ${answer}
 
-${EVALUATE_PROMPT}`;
+Now evaluate the answer:`;
 
   try {
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: 'assistant', content: EVALUATE_PROMPT },
-        { role: 'user', content: context },
-      ],
-      thinking: { type: 'disabled' },
-    });
-
-    const responseText = completion.choices[0]?.message?.content?.trim() || '';
+    const responseText = await generateText(context);
     const parsed = parseEvaluateResponse(responseText);
 
     return NextResponse.json({
@@ -333,9 +321,9 @@ async function handleFeedback(
   profile: { role: string; level: string; skills: string; previousScore: string },
   messages: Array<{ role: string; content: string; questionType?: string; difficulty?: string }>
 ) {
-  const zai = await getZAI();
+  let transcript = `${FEEDBACK_PROMPT}
 
-  let transcript = `Candidate Profile:
+Candidate Profile:
 - Role: ${profile.role}
 - Experience Level: ${profile.level}
 - Skills: ${profile.skills || 'Not specified'}
@@ -350,18 +338,10 @@ Interview Transcript:\n`;
     }
   }
 
-  transcript += `\n\n${FEEDBACK_PROMPT}`;
+  transcript += '\n\nNow provide the detailed feedback JSON:';
 
   try {
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: 'assistant', content: FEEDBACK_PROMPT },
-        { role: 'user', content: transcript },
-      ],
-      thinking: { type: 'disabled' },
-    });
-
-    const responseText = completion.choices[0]?.message?.content?.trim() || '';
+    const responseText = await generateText(transcript);
     const parsed = parseFeedbackResponse(responseText);
 
     return NextResponse.json({
@@ -456,10 +436,12 @@ function parseJSONResponse(text: string): {
   type: string;
   difficulty: string;
 } {
+  // Remove markdown code fences if present
+  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   try {
-    return JSON.parse(text);
+    return JSON.parse(cleaned);
   } catch {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
         return JSON.parse(jsonMatch[0]);
@@ -468,7 +450,7 @@ function parseJSONResponse(text: string): {
       }
     }
     return {
-      question: text.replace(/[{}"]/g, '').trim() || 'Tell me about a challenging technical problem you solved recently.',
+      question: cleaned.replace(/[{}"]/g, '').trim() || 'Tell me about a challenging technical problem you solved recently.',
       type: 'HR/Behavioral',
       difficulty: 'medium',
     };
@@ -476,11 +458,12 @@ function parseJSONResponse(text: string): {
 }
 
 function parseHintResponse(text: string): { hint: string } {
+  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(cleaned);
     return { hint: parsed.hint || 'Think about breaking the problem into smaller sub-problems.' };
   } catch {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
@@ -489,19 +472,20 @@ function parseHintResponse(text: string): { hint: string } {
         // fall through
       }
     }
-    return { hint: text.replace(/[{}"]/g, '').trim() || 'Think about breaking the problem into smaller sub-problems.' };
+    return { hint: cleaned.replace(/[{}"]/g, '').trim() || 'Think about breaking the problem into smaller sub-problems.' };
   }
 }
 
 function parseEvaluateResponse(text: string): { score: number; feedback: string } {
+  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(cleaned);
     return {
       score: Math.min(5, Math.max(1, Number(parsed.score) || 3)),
       feedback: parsed.feedback || 'Answer recorded.',
     };
   } catch {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
@@ -523,8 +507,9 @@ function parseFeedbackResponse(text: string): {
   improvements: string[];
   summary: string;
 } {
+  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(cleaned);
     return {
       overallScore: Math.min(10, Math.max(1, Number(parsed.overallScore) || 5)),
       strengths: Array.isArray(parsed.strengths) ? parsed.strengths.slice(0, 5) : ['Completed the interview session'],
@@ -532,7 +517,7 @@ function parseFeedbackResponse(text: string): {
       summary: parsed.summary || 'Thank you for completing the interview session.',
     };
   } catch {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
