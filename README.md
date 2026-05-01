@@ -14,7 +14,7 @@
 
 <br />
 
-[🚀 Live Demo](https://my-project-nine-virid-24.vercel.app) · [✨ Features](#-features) · [📁 Project Structure](#-project-structure) · [🛠 Tech Stack](#-tech-stack) · [🚀 Getting Started](#-getting-started) · [📐 Architecture](#-architecture) · [🤝 Contributing](#-contributing)
+[✨ Features](#-features) · [📁 Project Structure](#-project-structure) · [🛠 Tech Stack](#-tech-stack) · [🚀 Getting Started](#-getting-started) · [📐 Architecture](#-architecture) · [🤝 Contributing](#-contributing)
 
 </div>
 
@@ -24,7 +24,7 @@
 
 **SkillGap AI** is a full-stack monorepo application that simulates real technical interviews using AI and identifies skill gaps. It generates adaptive, role-specific questions across DSA, System Design, and HR/Behavioral domains — adjusting difficulty in real-time based on your responses. Get detailed AI-powered feedback, per-question scoring, and track your progress over time.
 
-> 🟢 **Try it live**: [https://my-project-nine-virid-24.vercel.app](https://my-project-nine-virid-24.vercel.app)
+> 🟢 **Run it locally** by following the [Getting Started](#-getting-started) guide below.
 
 > 💡 Whether you're a beginner preparing for your first SDE interview or a senior engineer brushing up on system design — this app adapts to **your** level and helps you identify and close skill gaps.
 
@@ -151,7 +151,7 @@ skillgap-ai/
 | **Icons** | [Lucide React](https://lucide.dev/) | — |
 | **Theming** | [next-themes](https://github.com/pacocoursey/next-themes) | — |
 | **Validation** | [Zod](https://zod.dev/) | [Pydantic](https://docs.pydantic.dev/) |
-| **Deployment** | [Vercel](https://vercel.com/) | Docker / any Python host |
+| **Deployment** | Docker / any Node host | Docker / any Python host |
 
 ---
 
