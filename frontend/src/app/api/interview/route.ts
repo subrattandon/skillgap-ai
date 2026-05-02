@@ -97,39 +97,53 @@ You MUST respond with valid JSON in exactly this format:
 
 IMPORTANT: Only respond with the JSON object, nothing else. No markdown, no explanation.`;
 
-// Ordered fallback list — if one model hits quota/is deprecated, next one is tried automatically
+// Ordered fallback list — using latest available models as of 2026
 const MODEL_FALLBACKS = [
   'gemini-2.5-flash',
+  'gemini-2.5-pro',
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
-  'gemini-2.5-pro',
 ];
 
 function getGeminiModel(modelName: string) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not set in .env.local');
+    throw new Error('GEMINI_API_KEY is not set. Please add it to your environment variables in Vercel.');
   }
   return new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: modelName });
 }
 
 async function generateText(prompt: string): Promise<string> {
-  let lastError: unknown = null;
+  let lastError: any = null;
 
   for (const modelName of MODEL_FALLBACKS) {
     try {
+      console.log(`[Interview API] Attempting generation with model: ${modelName}`);
       const model = getGeminiModel(modelName);
       const result = await model.generateContent(prompt);
-      return result.response.text().trim();
-    } catch (err: unknown) {
-      const e = err as { status?: number };
-      // Only fallback on quota (429) or model-not-found (404) errors
-      if (e?.status === 429 || e?.status === 404) {
-        console.warn(`[Interview API] Model "${modelName}" failed (${e.status}), trying next...`);
-        lastError = err;
+      const response = await result.response;
+      const text = response.text();
+      
+      if (!text) {
+        throw new Error('Empty response from Gemini');
+      }
+      
+      return text.trim();
+    } catch (err: any) {
+      lastError = err;
+      const status = err?.status || err?.response?.status;
+      const message = err?.message || 'Unknown error';
+      
+      console.error(`[Interview API] Model "${modelName}" failed. Status: ${status}, Message: ${message}`);
+      
+      // Fallback on quota (429), model-not-found (404), or generic server errors (500, 503)
+      if (status === 429 || status === 404 || status === 500 || status === 503) {
+        console.warn(`[Interview API] Retrying with next model due to transient error: ${status}`);
         continue;
       }
-      throw err; // Auth errors, bad requests — fail immediately
+      
+      // If it's an auth error or bad request, don't bother retrying other models
+      throw err;
     }
   }
 
@@ -217,10 +231,25 @@ Generate the first interview question for this candidate. Start with an appropri
       { error: 'Invalid action. Use "start", "next", "skip", "hint", "evaluate", or "feedback"' },
       { status: 400 }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Interview API error:', error);
+    
+    // Provide a more descriptive error if it's a known issue
+    let errorMessage = 'Failed to generate question';
+    if (error?.message?.includes('GEMINI_API_KEY')) {
+      errorMessage = 'API Key not configured. Please check your Vercel environment variables.';
+    } else if (error?.status === 429) {
+      errorMessage = 'Rate limit exceeded. Please try again in a moment.';
+    } else if (error?.status === 401 || error?.status === 403) {
+      errorMessage = 'Invalid API Key. Please verify your GEMINI_API_KEY.';
+    }
+
     return NextResponse.json(
-      { error: 'Failed to generate question' },
+      { 
+        success: false,
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }
